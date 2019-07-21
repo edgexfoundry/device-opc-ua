@@ -3,8 +3,6 @@
 ## Overview
 This repository is a Go-based EdgeX Foundry Device Service which uses OPC-UA protocol to interact with the devices or IoT objects.
 
-For more details, please refer to [README_CN.md](https://github.com/Burning1020/device-opcua-go/blob/master/README_CN.md)
-
 ## Feature
 
 1. Subscribe data from OPCUA endpoint
