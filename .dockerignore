@@ -1,0 +1,7 @@
+*~
+*.log
+cmd/device-opcua
+cmd/device-opcua-arm64
+go.sum
+vendor
+.idea
