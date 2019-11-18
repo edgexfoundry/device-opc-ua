@@ -5,6 +5,7 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
+// This package provides a simple example of a device service.
 package main
 
 import (

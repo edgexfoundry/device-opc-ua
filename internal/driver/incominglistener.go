@@ -4,29 +4,30 @@ package driver
 import (
 	"context"
 	"fmt"
-	"time"
-
 	sdk "github.com/edgexfoundry/device-sdk-go"
 	sdkModel "github.com/edgexfoundry/device-sdk-go/pkg/models"
 	"github.com/gopcua/opcua"
+	"github.com/gopcua/opcua/monitor"
 	"github.com/gopcua/opcua/ua"
+	"time"
 )
 
 var service *sdk.Service
 
 func startIncomingListening() error {
-
-	var (
-		devicename = driver.Config.DeviceName
-		policy     = driver.Config.Policy
-		mode       = driver.Config.Mode
-		certFile   = driver.Config.CertFile
-		keyFile    = driver.Config.KeyFile
-		nodeID     = driver.Config.NodeID
-	)
-
+	driver.Logger.Info("[Incoming listener] Start incoming data listening. ")
 	service = sdk.RunningService()
-	device, err := service.GetDeviceByName(devicename)
+	errChan := make(chan error)
+	for _, device := range driver.Config.Devices {
+		go func() {
+			errChan <- subscribeEachDevice(device)
+		}()
+	}
+	return <- errChan
+}
+
+func subscribeEachDevice(deviceInfo DevicesInfo) error {
+	device, err := service.GetDeviceByName(deviceInfo.DeviceName)
 	if err != nil {
 		return err
 	}
@@ -40,18 +41,18 @@ func startIncomingListening() error {
 	if err != nil {
 		return err
 	}
-	ep := opcua.SelectEndpoint(endpoints, policy, ua.MessageSecurityModeFromString(mode))
-	// replace Burning-Laptop with ip adress
+	ep := opcua.SelectEndpoint(endpoints, deviceInfo.Policy, ua.MessageSecurityModeFromString(deviceInfo.Mode))
+	// replace
 	ep.EndpointURL = connectionInfo.Endpoint
 	if ep == nil {
-		return fmt.Errorf("Failed to find suitable endpoint")
+		return fmt.Errorf("failed to find suitable endpoint")
 	}
 
 	opts := []opcua.Option{
-		opcua.SecurityPolicy(policy),
-		opcua.SecurityModeString(mode),
-		opcua.CertificateFile(certFile),
-		opcua.PrivateKeyFile(keyFile),
+		opcua.SecurityPolicy(deviceInfo.Policy),
+		opcua.SecurityModeString(deviceInfo.Mode),
+		opcua.CertificateFile(deviceInfo.CertFile),
+		opcua.PrivateKeyFile(deviceInfo.KeyFile),
 		opcua.AuthAnonymous(),
 		opcua.SecurityFromEndpoint(ep, ua.UserTokenTypeAnonymous),
 	}
@@ -62,77 +63,68 @@ func startIncomingListening() error {
 	}
 	defer client.Close()
 
-	sub, err := client.Subscribe(&opcua.SubscriptionParameters{
-		Interval: 500 * time.Millisecond,
+
+	m, err := monitor.NewNodeMonitor(client)
+	if err != nil {
+		return err
+	}
+
+	m.SetErrorHandler(func(_ *opcua.Client, sub *monitor.Subscription, err error) {
+		driver.Logger.Error(fmt.Sprintf("error: sub=%d err=%s", sub.SubscriptionID(), err.Error()))
 	})
+
+	// start channel-based subscription
+	errchan := make(chan error)
+	go startChanSub(ctx, m, deviceInfo.DeviceName, errchan,0, deviceInfo.NodeIds...)
+	<-ctx.Done()
+	return <- errchan
+}
+
+func startChanSub(ctx context.Context, m *monitor.NodeMonitor, deviceName string, errchan chan error, lag time.Duration, nodes ...string) {
+	ch := make(chan *monitor.DataChangeMessage, 16)
+	sub, err := m.ChanSubscribe(ctx, ch, nodes...)
+
 	if err != nil {
-		return err
-	}
-	defer sub.Cancel()
-
-	id, err := ua.ParseNodeID(nodeID)
-	if err != nil {
-		return err
+		errchan <- err
 	}
 
-	// arbitrary client handle for the monitoring item
-	handle := uint32(1) // arbitrary client id
-	miCreateRequest := opcua.NewMonitoredItemCreateRequestWithDefaults(id, ua.AttributeIDValue, handle)
-	res, err := sub.Monitor(ua.TimestampsToReturnBoth, miCreateRequest)
-	if err != nil || res.Results[0].StatusCode != ua.StatusOK {
-		return err
-	}
+	defer cleanup(sub)
 
-	driver.Logger.Info("[Incoming listener] Start incoming data listening. ")
-
-	go sub.Run(ctx) // start Publish loop
-
-	// read from subscription's notification channel until ctx is cancelled
 	for {
 		select {
-		// context return
 		case <-ctx.Done():
-			return nil
-			// receive Publish Notification Data
-		case res := <-sub.Notifs:
-			if res.Error != nil {
-				driver.Logger.Debug(fmt.Sprintf("%s", res.Error))
-				continue
+			return
+		case msg := <-ch:
+			if msg.Error != nil {
+				errchan <- fmt.Errorf(fmt.Sprintf("[channel ] sub=%d error=%s", sub.SubscriptionID(), msg.Error))
+			} else {
+				onIncomingDataReceived(msg.Value.Value(), msg.NodeID.String(), deviceName)
+				driver.Logger.Debug(fmt.Sprintf("[channel ] sub=%d node=%s value=%v", sub.SubscriptionID(), msg.NodeID, msg.Value.Value()))
 			}
-			switch x := res.Value.(type) {
-			// result type: DateChange StatusChange
-			case *ua.DataChangeNotification:
-				for _, item := range x.MonitoredItems {
-					data := item.Value.Value.Value
-					onIncomingDataReceived(data)
-				}
-			}
+			time.Sleep(lag)
 		}
 	}
 }
 
-func onIncomingDataReceived(data interface{}) {
-	deviceName := driver.Config.DeviceName
-	cmd := driver.Config.NodeID
-	reading := data
-
-
-
-	deviceObject, ok := service.DeviceResource(deviceName, cmd, "get")
+func cleanup(sub *monitor.Subscription) {
+	driver.Logger.Debug(fmt.Sprintf("stats: sub=%d delivered=%d dropped=%d", sub.SubscriptionID(), sub.Delivered(), sub.Dropped()))
+	sub.Unsubscribe()
+}
+func onIncomingDataReceived(data interface{}, deviceResource string, deviceName string) {
+	deviceObject, ok := service.DeviceResource(deviceName, deviceResource, "get")
 	if !ok {
-		driver.Logger.Warn(fmt.Sprintf("[Incoming listener] Incoming reading ignored. No DeviceObject found: name=%v deviceResource=%v value=%v", deviceName, cmd, data))
+		driver.Logger.Warn(fmt.Sprintf("[Incoming listener] Incoming reading ignored. No DeviceObject found: name=%v deviceResource=%v value=%v", deviceName, deviceResource, data))
 		return
 	}
 
 	req := sdkModel.CommandRequest{
-		DeviceResourceName: cmd,
+		DeviceResourceName: deviceResource,
 		Type:               sdkModel.ParseValueType(deviceObject.Properties.Value.Type),
 	}
 
-	result, err := newResult(req, reading)
-
+	result, err := newResult(req, data)
 	if err != nil {
-		driver.Logger.Warn(fmt.Sprintf("[Incoming listener] Incoming reading ignored. name=%v deviceResource=%v value=%v", deviceName, cmd, data))
+		driver.Logger.Warn(fmt.Sprintf("[Incoming listener] Incoming reading ignored. name=%v deviceResource=%v value=%v", deviceName, deviceResource, data))
 		return
 	}
 
@@ -140,9 +132,6 @@ func onIncomingDataReceived(data interface{}) {
 		DeviceName:    deviceName,
 		CommandValues: []*sdkModel.CommandValue{result},
 	}
-
-	driver.Logger.Info(fmt.Sprintf("[Incoming listener] Incoming reading received: name=%v deviceResource=%v value=%v", deviceName, cmd, data))
-
+	driver.Logger.Info(fmt.Sprintf("[Incoming listener] Incoming reading received: name=%v deviceResource=%v value=%v", deviceName, deviceResource, data))
 	driver.AsyncCh <- asyncValues
-
 }

@@ -22,7 +22,6 @@ FROM scratch
 # expose command data port
 EXPOSE 49997
 
-COPY --from=builder /go/src/github.com/edgexfoundry/device-opcua-go/cmd/device-opcua /
-COPY --from=builder /go/src/github.com/edgexfoundry/device-opcua-go/cmd/res/docker/configuration.toml /res/docker/configuration.toml
+COPY --from=builder /go/src/github.com/edgexfoundry/device-opcua-go/cmd /
 
-CMD ["/device-opcua", "--profile=docker", "--confdir=/res"]
+ENTRYPOINT ["/device-opcua","--profile=docker","--confdir=/res","--registry=consul://edgex-core-consul:8500"]

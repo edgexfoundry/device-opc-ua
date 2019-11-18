@@ -20,7 +20,7 @@ deviceResources:
     description: "generated random number"
     properties:
       value:
-        { type: "Float64", size: "4", readWrite: "R", defaultValue: "0.00", minimum: "100.00", maximum: "0.00"  }
+        { type: "Double", size: "4", readWrite: "R", defaultValue: "0.00", minimum: "0.00", maximum: "1.00"  }
       units:
         { type: "String", readWrite: "R", defaultValue: "" }
 
@@ -29,14 +29,14 @@ deviceCommands:
     name: "CounterNum"
     get:
       -
-        { operation: "get", object: "ns=5;s=Counter1", property: "value", parameter: "ns=5;s=Counter1" }
+        { index: "1", operation: "get", deviceResource: "ns=5;s=Counter1" }
     set:
-      - { operation: "set", object: "ns=5;s=Counter1", property: "value", parameter: "ns=5;s=Counter1" }
+      - { index: "1", operation: "set", deviceResource: "ns=5;s=Counter1" }
   -
     name: "RandomNum"
     get:
       -
-        { operation: "get", object: "ns=5;s=Random1", property: "value", parameter: "ns=5;s=Random1" }
+        { index: "1", operation: "get", deviceResource: "ns=5;s=Random1" }
 coreCommands:
   -
     name: "CounterNum"

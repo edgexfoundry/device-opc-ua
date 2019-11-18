@@ -2,6 +2,7 @@
 package driver
 
 import (
+	"encoding/json"
 	"fmt"
 	"github.com/edgexfoundry/go-mod-core-contracts/models"
 	"reflect"
@@ -9,31 +10,33 @@ import (
 )
 
 type ConnectionInfo struct {
-	Endpoint     		string
+	Endpoint     	string
 }
-
-type configuration struct {
-	DeviceName		string
-	Policy 			string
-	Mode  			string
-	CertFile	 	string
-	KeyFile 		string
-	NodeID 			string
+type SubscribeJson struct {
+	Devices []DevicesInfo
+}
+type DevicesInfo struct {
+	DeviceName		string    `json:"deviceName"`
+	NodeIds			[]string  `json:"nodeIds"`
+	Policy 			string	  `json:"policy"`
+	Mode  			string	  `json:"mode"`
+	CertFile	 	string    `json:"certFile"`
+	KeyFile 		string	  `json:"keyFile"`
 }
 
 // CreateDriverConfig use to load driver config for incoming listener and response listener
-func CreateDriverConfig(configMap map[string]string) (*configuration, error) {
+func CreateDriverConfig(configMap map[string]string) (*SubscribeJson, error) {
+	config := new(SubscribeJson)
+	data := []byte(configMap["SubscribeJson"])
 
-	config := new(configuration)
-
-	err := load(configMap, config)
+	err := json.Unmarshal(data, config)
 	if err != nil {
 		return config, err
 	}
 	return config, nil
 }
 
-// CreateConnectionInfo use to load MQTT connectionInfo for read and write command
+// CreateConnectionInfo use to load connectionInfo for read and write command
 func CreateConnectionInfo(protocols map[string]models.ProtocolProperties) (*ConnectionInfo, error) {
 	info := new(ConnectionInfo)
 	protocol, ok := protocols["opcua"]

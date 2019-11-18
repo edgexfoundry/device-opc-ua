@@ -3,7 +3,7 @@ Host = "device-opcua-go"
 Port = 49997
 ConnectRetries = 3
 Labels = []
-OpenMsg = "device opcua started"
+OpenMsg = "device simple started"
 ReadMaxLimit = 256
 Timeout = 5000
 EnableAsyncReadings = true
@@ -67,9 +67,4 @@ LogLevel = "INFO"
 
 # Driver configs
 [Driver]
-  DeviceName = "SimulationServer"   # Name of Devcice exited
-  Policy = "None"                   # Security policy: None, Basic128Rsa15, Basic256, Basic256Sha256. Default: auto
-  Mode = "None"                     # Security mode: None, Sign, SignAndEncrypt. Default: auto
-  CertFile = ""                     # Path to cert.pem. Required for security mode/policy != None
-  KeyFile = ""                      # Path to private key.pem. Required for security mode/policy != None
-  NodeID = "ns=5;s=Counter1"        # Node id to subscribe to
+  SubscribeJson = " {\"devices\":[{\"deviceName\":\"SimulationServer\",\"nodeIds\":[\"ns=5;s=Counter1\",\"ns=5;s=Random1\"],\"policy\":\"None\",\"mode\":\"None\",\"certFile\":\"\",\"keyFile\":\"\"}]} "
