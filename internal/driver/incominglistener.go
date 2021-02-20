@@ -116,8 +116,6 @@ func onIncomingDataReceived(data interface{}) {
 	cmd := driver.Config.NodeID
 	reading := data
 
-
-
 	deviceObject, ok := service.DeviceResource(deviceName, cmd, "get")
 	if !ok {
 		driver.Logger.Warn(fmt.Sprintf("[Incoming listener] Incoming reading ignored. No DeviceObject found: name=%v deviceResource=%v value=%v", deviceName, cmd, data))
