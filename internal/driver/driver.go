@@ -155,7 +155,7 @@ func (d *Driver) HandleWriteCommands(deviceName string, protocols map[string]mod
 	c := opcua.NewClient(connectionInfo.Endpoint, opcua.SecurityMode(ua.MessageSecurityModeNone))
 	if err := c.Connect(ctx); err != nil {
 		driver.Logger.Warn(fmt.Sprintf("Driver.HandleWriteCommands: Failed to create OPCUA client, %s", err))
-		return  err
+		return err
 	}
 
 	for _, req := range reqs {
@@ -164,7 +164,7 @@ func (d *Driver) HandleWriteCommands(deviceName string, protocols map[string]mod
 			err := d.handleWriteCommandRequest(c, req, param)
 			if err != nil {
 				driver.Logger.Error(fmt.Sprintf("Driver.HandleWriteCommands: Handle write commands failed: %v", err))
-				return  err
+				return err
 			}
 		}
 
@@ -200,7 +200,7 @@ func (d *Driver) handleWriteCommandRequest(deviceClient *opcua.Client, req sdkMo
 				NodeID:      id,
 				AttributeID: ua.AttributeIDValue,
 				Value: &ua.DataValue{
-					EncodingMask: ua.DataValueValue,  // encoding mask
+					EncodingMask: ua.DataValueValue, // encoding mask
 					Value:        v,
 				},
 			},
@@ -215,7 +215,6 @@ func (d *Driver) handleWriteCommandRequest(deviceClient *opcua.Client, req sdkMo
 	driver.Logger.Info(fmt.Sprintf("Driver.handleWriteCommands: write sucessfully, ", resp.Results[0]))
 	return nil
 }
-
 
 // Stop the protocol-specific DS code to shutdown gracefully, or
 // if the force parameter is 'true', immediately. The driver is responsible
@@ -317,7 +316,6 @@ func newResult(req sdkModel.CommandRequest, reading interface{}) (*sdkModel.Comm
 
 	return result, err
 }
-
 
 func newCommandValue(valueType sdkModel.ValueType, param *sdkModel.CommandValue) (interface{}, error) {
 	var commandValue interface{}

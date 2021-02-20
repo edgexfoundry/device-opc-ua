@@ -9,16 +9,16 @@ import (
 )
 
 type ConnectionInfo struct {
-	Endpoint     		string
+	Endpoint string
 }
 
 type configuration struct {
-	DeviceName		string
-	Policy 			string
-	Mode  			string
-	CertFile	 	string
-	KeyFile 		string
-	NodeID 			string
+	DeviceName string
+	Policy     string
+	Mode       string
+	CertFile   string
+	KeyFile    string
+	NodeID     string
 }
 
 // CreateDriverConfig use to load driver config for incoming listener and response listener
