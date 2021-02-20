@@ -161,7 +161,7 @@ func (d *Driver) HandleWriteCommands(deviceName string, protocols map[string]mod
 	for _, req := range reqs {
 		// handle every reqs every params
 		for _, param := range params {
-			err := d.handleWeadCommandRequest(c, req, param)
+			err := d.handleWriteCommandRequest(c, req, param)
 			if err != nil {
 				driver.Logger.Error(fmt.Sprintf("Driver.HandleWriteCommands: Handle write commands failed: %v", err))
 				return  err
@@ -173,7 +173,7 @@ func (d *Driver) HandleWriteCommands(deviceName string, protocols map[string]mod
 	return err
 }
 
-func (d *Driver) handleWeadCommandRequest(deviceClient *opcua.Client, req sdkModel.CommandRequest,
+func (d *Driver) handleWriteCommandRequest(deviceClient *opcua.Client, req sdkModel.CommandRequest,
 	param *sdkModel.CommandValue) error {
 	var err error
 	nodeID := req.DeviceResourceName
@@ -200,7 +200,7 @@ func (d *Driver) handleWeadCommandRequest(deviceClient *opcua.Client, req sdkMod
 				NodeID:      id,
 				AttributeID: ua.AttributeIDValue,
 				Value: &ua.DataValue{
-					EncodingMask: uint8(6),  // encoding mask
+					EncodingMask: ua.DataValueValue,  // encoding mask
 					Value:        v,
 				},
 			},
