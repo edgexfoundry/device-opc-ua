@@ -91,4 +91,4 @@ Policy = "None"                   # Security policy: None, Basic128Rsa15, Basic2
 Mode = "None"                     # Security mode: None, Sign, SignAndEncrypt. Default: None
 CertFile = ""                     # Path to cert.pem. Required for security mode/policy != None
 KeyFile = ""                      # Path to private key.pem. Required for security mode/policy != None
-NodeID = "ns=5;s=Counter1"        # Node id to subscribe to
+NodeID = "Counter1"               # Node id to subscribe to. Must match deviceResource name.

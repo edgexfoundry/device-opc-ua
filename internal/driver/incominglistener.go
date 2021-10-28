@@ -11,19 +11,19 @@ import (
 	"github.com/gopcua/opcua/ua"
 )
 
-func startIncomingListening() error {
+func (d *Driver) startIncomingListening() error {
 
 	var (
-		devicename = driver.serviceConfig.OPCUAServer.DeviceName
-		policy     = driver.serviceConfig.OPCUAServer.Policy
-		mode       = driver.serviceConfig.OPCUAServer.Mode
-		certFile   = driver.serviceConfig.OPCUAServer.CertFile
-		keyFile    = driver.serviceConfig.OPCUAServer.KeyFile
-		nodeID     = driver.serviceConfig.OPCUAServer.NodeID
+		deviceName = d.serviceConfig.OPCUAServer.DeviceName
+		policy     = d.serviceConfig.OPCUAServer.Policy
+		mode       = d.serviceConfig.OPCUAServer.Mode
+		certFile   = d.serviceConfig.OPCUAServer.CertFile
+		keyFile    = d.serviceConfig.OPCUAServer.KeyFile
+		nodeID     = d.serviceConfig.OPCUAServer.NodeID
 	)
 
-	service := service.RunningService()
-	device, err := service.GetDeviceByName(devicename)
+	ds := service.RunningService()
+	device, err := ds.GetDeviceByName(deviceName)
 	if err != nil {
 		return err
 	}
@@ -60,27 +60,37 @@ func startIncomingListening() error {
 
 	sub, err := client.Subscribe(
 		&opcua.SubscriptionParameters{
-			Interval: 500 * time.Millisecond,
-		}, nil)
+			Interval: time.Duration(500) * time.Millisecond,
+		}, make(chan *opcua.PublishNotificationData))
 	if err != nil {
 		return err
 	}
 	defer sub.Cancel()
 
-	id, err := ua.ParseNodeID(nodeID)
+	deviceResource, ok := ds.DeviceResource(deviceName, nodeID)
+	if !ok {
+		return fmt.Errorf("[Incoming listener] Unable to find device resource with name %s", nodeID)
+	}
+
+	opcuaNodeID, err := buildNodeID(deviceResource.Attributes, SYMBOL)
+	if err != nil {
+		return err
+	}
+
+	id, err := ua.ParseNodeID(opcuaNodeID)
 	if err != nil {
 		return err
 	}
 
 	// arbitrary client handle for the monitoring item
-	handle := uint32(1) // arbitrary client id
+	handle := uint32(42) // arbitrary client id
 	miCreateRequest := opcua.NewMonitoredItemCreateRequestWithDefaults(id, ua.AttributeIDValue, handle)
 	res, err := sub.Monitor(ua.TimestampsToReturnBoth, miCreateRequest)
 	if err != nil || res.Results[0].StatusCode != ua.StatusOK {
 		return err
 	}
 
-	driver.Logger.Info("[Incoming listener] Start incoming data listening. ")
+	d.Logger.Info("[Incoming listener] Start incoming data listening.")
 
 	go sub.Run(ctx) // start Publish loop
 
@@ -93,43 +103,42 @@ func startIncomingListening() error {
 			// receive Publish Notification Data
 		case res := <-sub.Notifs:
 			if res.Error != nil {
-				driver.Logger.Debug(fmt.Sprintf("%s", res.Error))
+				d.Logger.Debugf("%s", res.Error)
 				continue
 			}
 			switch x := res.Value.(type) {
 			// result type: DateChange StatusChange
 			case *ua.DataChangeNotification:
 				for _, item := range x.MonitoredItems {
-					data := item.Value.Value.Value
-					onIncomingDataReceived(data)
+					data := item.Value.Value.Value()
+					d.onIncomingDataReceived(data)
 				}
 			}
 		}
 	}
 }
 
-func onIncomingDataReceived(data interface{}) {
-	deviceName := driver.serviceConfig.OPCUAServer.DeviceName
-	cmd := driver.serviceConfig.OPCUAServer.NodeID
+func (d *Driver) onIncomingDataReceived(data interface{}) {
+	deviceName := d.serviceConfig.OPCUAServer.DeviceName
+	nodeResourceName := d.serviceConfig.OPCUAServer.NodeID
 	reading := data
 
-	service := service.RunningService()
+	ds := service.RunningService()
 
-	deviceObject, ok := service.DeviceResource(deviceName, cmd)
+	deviceResource, ok := ds.DeviceResource(deviceName, nodeResourceName)
 	if !ok {
-		driver.Logger.Warn(fmt.Sprintf("[Incoming listener] Incoming reading ignored. No DeviceObject found: name=%v deviceResource=%v value=%v", deviceName, cmd, data))
+		d.Logger.Warnf("[Incoming listener] Incoming reading ignored. No DeviceObject found: name=%v deviceResource=%v value=%v", deviceName, nodeResourceName, data)
 		return
 	}
 
 	req := models.CommandRequest{
-		DeviceResourceName: cmd,
-		Type:               deviceObject.Properties.ValueType,
+		DeviceResourceName: nodeResourceName,
+		Type:               deviceResource.Properties.ValueType,
 	}
 
 	result, err := newResult(req, reading)
-
 	if err != nil {
-		driver.Logger.Warn(fmt.Sprintf("[Incoming listener] Incoming reading ignored. name=%v deviceResource=%v value=%v", deviceName, cmd, data))
+		d.Logger.Warnf("[Incoming listener] Incoming reading ignored. name=%v deviceResource=%v value=%v", deviceName, nodeResourceName, data)
 		return
 	}
 
@@ -138,8 +147,8 @@ func onIncomingDataReceived(data interface{}) {
 		CommandValues: []*models.CommandValue{result},
 	}
 
-	driver.Logger.Info(fmt.Sprintf("[Incoming listener] Incoming reading received: name=%v deviceResource=%v value=%v", deviceName, cmd, data))
+	d.Logger.Infof("[Incoming listener] Incoming reading received: name=%v deviceResource=%v value=%v", deviceName, nodeResourceName, data)
 
-	driver.AsyncCh <- asyncValues
+	d.AsyncCh <- asyncValues
 
 }

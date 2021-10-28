@@ -6,9 +6,10 @@ This repository is a Go-based EdgeX Foundry Device Service which uses OPC-UA pro
 
 ## Features
 
-1. Execute read command
-2. Execute write command
-3. Execute method (using Read command of device SDK)
+1. Subscribe to a single variable
+2. Execute read command
+3. Execute write command
+4. Execute method (using Read command of device SDK)
 
 ## Prerequisites
 
@@ -45,6 +46,7 @@ Modify `configuration.toml` file found under the `./cmd/res` folder if needed
   Mode = "None"                     # Security mode: None, Sign, SignAndEncrypt. Default: auto
   CertFile = ""                     # Path to cert.pem. Required for security mode/policy != None
   KeyFile = ""                      # Path to private key.pem. Required for security mode/policy != None
+  NodeID = "Counter1"               # Node id to subscribe to. Must match deviceResource name.
 ```
 
 ## Devic Profile

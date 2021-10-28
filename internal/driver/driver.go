@@ -63,12 +63,14 @@ func (d *Driver) Initialize(lc logger.LoggingClient, asyncCh chan<- *sdkModel.As
 		return errors.NewCommonEdgeXWrapper(err)
 	}
 
-	// go func() {
-	// 	err := startIncomingListening()
-	// 	if err != nil {
-	// 		panic(fmt.Errorf("Driver.Initialize: Start incoming data Listener failed: %v", err))
-	// 	}
-	// }()
+	go func() {
+		// Sleep long enough for the device to be fully registered
+		time.Sleep(time.Second * time.Duration(2))
+		err := d.startIncomingListening()
+		if err != nil {
+			panic(fmt.Errorf("Driver.Initialize: Start incoming data Listener failed: %v", err))
+		}
+	}()
 	return nil
 }
 
