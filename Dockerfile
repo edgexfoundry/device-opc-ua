@@ -1,5 +1,6 @@
 #
 # Copyright (c) 2018, 2019 Intel
+# Copyright (c) 2021 Schneider Electric
 #
 # SPDX-License-Identifier: Apache-2.0
 #

@@ -1,7 +1,6 @@
 // -*- Mode: Go; indent-tabs-mode: t -*-
 //
-// Copyright (C) 2018 Canonical Ltd
-// Copyright (C) 2018 IOTech Ltd
+// Copyright (C) 2021 Schneider Electric
 //
 // SPDX-License-Identifier: Apache-2.0
 
