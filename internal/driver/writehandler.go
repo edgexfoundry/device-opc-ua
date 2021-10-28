@@ -40,14 +40,11 @@ func (d *Driver) HandleWriteCommands(deviceName string, protocols map[string]mod
 }
 
 func (d *Driver) processWriteCommands(client *opcua.Client, reqs []sdkModel.CommandRequest, params []*sdkModel.CommandValue) error {
-	for _, req := range reqs {
-		// handle every reqs every params
-		for _, param := range params {
-			err := d.handleWriteCommandRequest(client, req, param)
-			if err != nil {
-				d.Logger.Errorf("Driver.HandleWriteCommands: Handle write commands failed: %v", err)
-				return err
-			}
+	for i, req := range reqs {
+		err := d.handleWriteCommandRequest(client, req, params[i])
+		if err != nil {
+			d.Logger.Errorf("Driver.HandleWriteCommands: Handle write commands failed: %v", err)
+			return err
 		}
 	}
 
