@@ -4,20 +4,20 @@
 
 This repository is a Go-based EdgeX Foundry Device Service which uses OPC-UA protocol to interact with the devices or IoT objects.
 
-## Feature
+## Features
 
-1. Subscribe data from OPCUA endpoint (TBD)
-2. Execute read command
-3. Execute write command
+1. Execute read command
+2. Execute write command
+3. Execute method (using Read command of device SDK)
 
-## Prerequisite
+## Prerequisites
 
 - Edgex-go: core data, core command, core metadata
 - OPCUA Server
 
 ## Predefined configuration
 
-### Pre-define Devices
+### Pre-defined Devices
 
 Define devices for device-sdk to auto upload device profile and create device instance. Please modify `devices.toml` file found under the `./cmd/res/devices` folder
 
@@ -33,7 +33,7 @@ Define devices for device-sdk to auto upload device profile and create device in
           Endpoint = "opc.tcp://node-red:55880/OPCUA/SimulationServer"
 ```
 
-### Subscribe configuration
+### Configuration
 
 Modify `configuration.toml` file found under the `./cmd/res` folder if needed
 
@@ -45,22 +45,25 @@ Modify `configuration.toml` file found under the `./cmd/res` folder if needed
   Mode = "None"                     # Security mode: None, Sign, SignAndEncrypt. Default: auto
   CertFile = ""                     # Path to cert.pem. Required for security mode/policy != None
   KeyFile = ""                      # Path to private key.pem. Required for security mode/policy != None
-  NodeID = "ns=5;s=Counter1"        # Node id to subscribe to
 ```
 
 ## Devic Profile
 
-A Device Profile can be thought of as a template of a type or classification of Device.
+A Device Profile can be thought of as a template of a type or classification of a Device.
 
-Write device profile for your own devices, define deviceResources, deviceCommands and coreCommands. Please refer to `cmd/res/profiles/OpcuaServer.yaml`
-
-Tips: name in deviceResources should consistent with OPCUA nodeid
+Write a device profile for your own devices; define `deviceResources` and `deviceCommands`. Please refer to `cmd/res/profiles/OpcuaServer.yaml`
 
 ## Installation and Execution
 
 ```bash
 make build
 make run
+```
+
+## Build a Container Image
+
+```bash
+make docker
 ```
 
 ## Reference

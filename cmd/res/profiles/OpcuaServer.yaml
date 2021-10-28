@@ -29,6 +29,28 @@ deviceResources:
       maximum: "100.00"
     attributes:
       { namespace: "5", symbol: "Random1" }
+  -
+    name: "SetDefaultsMethod"
+    description: "Set all variables to their default values"
+    properties:
+      valueType: "String"
+      readWrite: "R"
+    attributes:
+      { namespace: "5", method: "Defaults", object: "" }
+  -
+    name: "AddNodeMethod"
+    description: "Add a Node to the OPCUA Server"
+    properties:
+      valueType: "String"
+      readWrite: "R"
+    attributes:
+      {
+        namespace: "5",
+        method: "NewNode",
+        object: "",
+        inputMap: [ "MyNewNode", "NewNode0", "int32" ],
+      }
+
 
 deviceCommands:
   -
@@ -43,3 +65,15 @@ deviceCommands:
     readWrite: "R"
     resourceOperations:
       - { deviceResource: "Random1", defaultValue: "0.00" }
+  -
+    name: "SetDefaults"
+    isHidden: false
+    readWrite: "R"
+    resourceOperations:
+      - { deviceResource: "SetDefaultsMethod" }
+  -
+    name: "AddNode"
+    isHidden: false
+    readWrite: "R"
+    resourceOperations:
+      - { deviceResource: "AddNodeMethod" }

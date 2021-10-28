@@ -126,21 +126,34 @@ func (d *Driver) HandleReadCommands(deviceName string, protocols map[string]mode
 	return responses, err
 }
 
-func (d *Driver) handleReadCommandRequest(deviceClient *opcua.Client,
-	req sdkModel.CommandRequest) (*sdkModel.CommandValue, error) {
+func (d *Driver) handleReadCommandRequest(deviceClient *opcua.Client, req sdkModel.CommandRequest) (*sdkModel.CommandValue, error) {
 	var result = &sdkModel.CommandValue{}
-	nodeID, err := buildNodeID(req.Attributes)
-	if err != nil {
-		return result, fmt.Errorf("Driver.handleReadCommands: %v", err)
+	var err error
+
+	_, isMethod := req.Attributes[METHOD]
+
+	if isMethod {
+		result, err = makeMethodCall(deviceClient, req)
+		d.Logger.Infof("Method command finished: %v", result)
+	} else {
+		result, err = makeReadRequest(deviceClient, req)
+		d.Logger.Infof("Read command finished: %v", result)
 	}
 
-	// get NewNodeID
+	return result, err
+}
+
+func makeReadRequest(deviceClient *opcua.Client, req sdkModel.CommandRequest) (*sdkModel.CommandValue, error) {
+	nodeID, err := buildNodeID(req.Attributes, SYMBOL)
+	if err != nil {
+		return nil, fmt.Errorf("Driver.handleReadCommands: %v", err)
+	}
+
 	id, err := ua.ParseNodeID(nodeID)
 	if err != nil {
-		return result, fmt.Errorf("Driver.handleReadCommands: Invalid node id=%s; %v", nodeID, err)
+		return nil, fmt.Errorf("Driver.handleReadCommands: Invalid node id=%s; %v", nodeID, err)
 	}
 
-	// make and execute ReadRequest
 	request := &ua.ReadRequest{
 		MaxAge: 2000,
 		NodesToRead: []*ua.ReadValueID{
@@ -150,23 +163,64 @@ func (d *Driver) handleReadCommandRequest(deviceClient *opcua.Client,
 	}
 	resp, err := deviceClient.Read(request)
 	if err != nil {
-		d.Logger.Errorf("Driver.handleReadCommands: Read failed: %s", err)
+		return nil, fmt.Errorf("Driver.handleReadCommands: Read failed: %s", err)
 	}
 	if resp.Results[0].Status != ua.StatusOK {
-		d.Logger.Errorf("Driver.handleReadCommands: Status not OK: %v", resp.Results[0].Status)
-
+		return nil, fmt.Errorf("Driver.handleReadCommands: Status not OK: %v", resp.Results[0].Status)
 	}
 
 	// make new result
 	reading := resp.Results[0].Value.Value()
-	result, err = newResult(req, reading)
+	return newResult(req, reading)
+}
+
+func makeMethodCall(deviceClient *opcua.Client, req sdkModel.CommandRequest) (*sdkModel.CommandValue, error) {
+	var inputs []*ua.Variant
+
+	objectID, err := buildNodeID(req.Attributes, OBJECT)
 	if err != nil {
-		return result, err
+		return nil, fmt.Errorf("Driver.handleReadCommands: %v", err)
+	}
+	oid, err := ua.ParseNodeID(objectID)
+	if err != nil {
+		return nil, fmt.Errorf("Driver.handleReadCommands: %v", err)
 	}
 
-	d.Logger.Infof("Read command finished: %v", result)
+	methodID, err := buildNodeID(req.Attributes, METHOD)
+	if err != nil {
+		return nil, fmt.Errorf("Driver.handleReadCommands: %v", err)
+	}
+	mid, err := ua.ParseNodeID(methodID)
+	if err != nil {
+		return nil, fmt.Errorf("Driver.handleReadCommands: %v", err)
+	}
 
-	return result, err
+	inputMap, ok := req.Attributes[INPUTMAP]
+	if ok {
+		imElements := inputMap.([]interface{})
+		if len(imElements) > 0 {
+			inputs = make([]*ua.Variant, len(imElements))
+			for i := 0; i < len(imElements); i++ {
+				inputs[i] = ua.MustVariant(imElements[i].(string))
+			}
+		}
+	}
+
+	request := &ua.CallMethodRequest{
+		ObjectID:       oid,
+		MethodID:       mid,
+		InputArguments: inputs,
+	}
+
+	resp, err := deviceClient.Call(request)
+	if err != nil {
+		return nil, fmt.Errorf("Driver.handleReadCommands: Method call failed: %s", err)
+	}
+	if resp.StatusCode != ua.StatusOK {
+		return nil, fmt.Errorf("Driver.handleReadCommands: Method status not OK: %v", resp.StatusCode)
+	}
+
+	return newResult(req, resp.OutputArguments[0].Value())
 }
 
 // HandleWriteCommands passes a slice of CommandRequest struct each representing
@@ -210,7 +264,7 @@ func (d *Driver) HandleWriteCommands(deviceName string, protocols map[string]mod
 
 func (d *Driver) handleWriteCommandRequest(deviceClient *opcua.Client, req sdkModel.CommandRequest,
 	param *sdkModel.CommandValue) error {
-	nodeID, err := buildNodeID(req.Attributes)
+	nodeID, err := buildNodeID(req.Attributes, SYMBOL)
 	if err != nil {
 		return fmt.Errorf("Driver.handleWriteCommands: %v", err)
 	}
@@ -262,15 +316,15 @@ func (d *Driver) Stop(force bool) error {
 	return nil
 }
 
-func buildNodeID(attrs map[string]interface{}) (string, error) {
+func buildNodeID(attrs map[string]interface{}, sKey string) (string, error) {
 	if _, ok := attrs[NAMESPACE]; !ok {
 		return "", fmt.Errorf("Attribute %s does not exist", NAMESPACE)
 	}
-	if _, ok := attrs[SYMBOL]; !ok {
-		return "", fmt.Errorf("Attribute %s does not exist", SYMBOL)
+	if _, ok := attrs[sKey]; !ok {
+		return "", fmt.Errorf("Attribute %s does not exist", sKey)
 	}
 
-	return fmt.Sprintf("ns=%s;s=%s", attrs[NAMESPACE].(string), attrs[SYMBOL].(string)), nil
+	return fmt.Sprintf("ns=%s;s=%s", attrs[NAMESPACE].(string), attrs[sKey].(string)), nil
 }
 
 func newResult(req sdkModel.CommandRequest, reading interface{}) (*sdkModel.CommandValue, error) {
