@@ -1,0 +1,40 @@
+name: Go Build and Test
+
+on:
+  push:
+    branches: [ $default-branch ]
+  pull_request:
+    branches: [ $default-branch ]
+
+  workflow_dispatch:
+
+jobs:
+
+  build:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v2
+
+    - name: Set up Go
+      uses: actions/setup-go@v2
+      with:
+        go-version: 1.16
+
+    - name: Set up Python
+      uses: actions/setup-python@v2
+      with:
+        python-version: '3.x'
+
+    - name: Install build pre-requisites
+      run: |
+        sudo apt-get update
+        sudo apt-get install libzmq3-dev libsodium-dev libsodium23=1.0.18-1
+
+    - name: Build
+      run: make build
+
+    - name: Install Python pre-requisites
+      run: python3 -m pip install opcua
+
+    - name: Test
+      run: make test
