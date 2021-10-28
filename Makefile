@@ -7,13 +7,13 @@ MICROSERVICES=cmd/device-opcua
 
 .PHONY: $(MICROSERVICES)
 
-VERSION=$(shell cat ./VERSION)
+VERSION=$(shell cat ./VERSION 2>/dev/null || echo 0.0.0)
 
 GOFLAGS=-ldflags "-X github.com/edgexfoundry/device-opcua-go.Version=$(VERSION)"
 
 GIT_SHA=$(shell git rev-parse HEAD)
 
-TEST_OUT=test-results
+TEST_OUT=test-artifacts
 
 build: $(MICROSERVICES)
 	$(CGO) install -tags=safe
@@ -31,7 +31,6 @@ test:
 	$(GO) test -v ./... -coverprofile=$(TEST_OUT)/cover.out | go-junit-report > $(TEST_OUT)/report.xml
 	gocov convert $(TEST_OUT)/cover.out | gocov-xml > $(TEST_OUT)/coverage.xml
 	gcov2lcov -infile=$(TEST_OUT)/cover.out -outfile=$(TEST_OUT)/coverage.lcov
-	rm $(TEST_OUT)/cover.out
 
 clean:
 	rm -f $(MICROSERVICES)

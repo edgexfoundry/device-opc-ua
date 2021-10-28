@@ -4,4 +4,4 @@ cmd/device-opcua
 cmd/device-opcua-arm64
 vendor
 .idea
-test-results
+test-artifacts
