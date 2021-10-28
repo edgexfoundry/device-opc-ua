@@ -1,13 +1,6 @@
 package driver
 
 const (
-	// Protocol is the supported device protocol
-	Protocol = "opcua"
-	// Endpoint is a constant string
-	Endpoint = "Endpoint"
-)
-
-const (
 	// CustomConfigSectionName is the name of the configuration options
 	// section in /cmd/res/configuration.toml
 	CustomConfigSectionName = "OPCUAServer"

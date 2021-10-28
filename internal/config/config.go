@@ -1,4 +1,4 @@
-package driver
+package config
 
 import (
 	"fmt"
@@ -77,7 +77,8 @@ func (info *OPCUAServerConfig) Validate() errors.EdgeX {
 	return nil
 }
 
-func fetchEndpoint(protocols map[string]models.ProtocolProperties) (string, errors.EdgeX) {
+// FetchEndpoint returns the OPCUA endpoint defined in the configuration
+func FetchEndpoint(protocols map[string]models.ProtocolProperties) (string, errors.EdgeX) {
 	properties, ok := protocols[Protocol]
 	if !ok {
 		return "", errors.NewCommonEdgeX(errors.KindContractInvalid, fmt.Sprintf("'%s' protocol properties is not defined", Protocol), nil)

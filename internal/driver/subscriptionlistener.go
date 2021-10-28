@@ -6,13 +6,14 @@ import (
 	"strings"
 	"time"
 
+	"github.com/edgexfoundry/device-opcua-go/internal/config"
 	"github.com/edgexfoundry/device-sdk-go/v2/pkg/models"
 	"github.com/edgexfoundry/device-sdk-go/v2/pkg/service"
 	"github.com/gopcua/opcua"
 	"github.com/gopcua/opcua/ua"
 )
 
-func (d *Driver) startIncomingListening() error {
+func (d *Driver) startSubscriptionListener() error {
 
 	var (
 		deviceName = d.serviceConfig.OPCUAServer.DeviceName
@@ -39,7 +40,7 @@ func (d *Driver) startIncomingListening() error {
 	if err != nil {
 		return err
 	}
-	endpoint, err := fetchEndpoint(device.Protocols)
+	endpoint, err := config.FetchEndpoint(device.Protocols)
 	if err != nil {
 		return err
 	}
