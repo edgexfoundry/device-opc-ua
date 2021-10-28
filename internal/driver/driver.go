@@ -68,7 +68,6 @@ func (d *Driver) Initialize(lc logger.LoggingClient, asyncCh chan<- *sdkModel.As
 	}
 
 	return nil
-
 }
 
 // Callback function provided to ListenForCustomConfigChanges to update
@@ -107,6 +106,9 @@ func (d *Driver) cleanup() {
 // AddDevice is a callback function that is invoked
 // when a new Device associated with this Device Service is added
 func (d *Driver) AddDevice(deviceName string, protocols map[string]models.ProtocolProperties, adminState models.AdminState) error {
+	// Start subscription listener when device is added.
+	// This does not happen automatically like it does when the device is updated
+	go d.startSubscriber()
 	d.Logger.Debugf("Device %s is added", deviceName)
 	return nil
 }

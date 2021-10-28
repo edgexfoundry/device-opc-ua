@@ -64,9 +64,9 @@ func TestDriver_AddDevice(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			d := &Driver{
-				Logger: &logger.MockLogger{},
-			}
+			d := NewProtocolDriver().(*Driver)
+			d.Logger = &logger.MockLogger{}
+			d.serviceConfig = &config.ServiceConfig{OPCUAServer: config.OPCUAServerConfig{DeviceName: tt.args.deviceName}}
 			if err := d.AddDevice(tt.args.deviceName, tt.args.protocols, tt.args.adminState); (err != nil) != tt.wantErr {
 				t.Errorf("Driver.AddDevice() error = %v, wantErr %v", err, tt.wantErr)
 			}
