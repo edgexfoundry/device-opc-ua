@@ -49,9 +49,12 @@ func (d *Driver) Initialize(lc logger.LoggingClient, asyncCh chan<- *sdkModel.As
 	d.resourceMap = make(map[uint32]string)
 
 	ds := service.RunningService()
+	if ds == nil {
+		return errors.NewCommonEdgeXWrapper(fmt.Errorf("unable to get running device service"))
+	}
 
 	if err := ds.LoadCustomConfig(d.serviceConfig, CustomConfigSectionName); err != nil {
-		return fmt.Errorf("unable to load '%s' custom configuration: %s", CustomConfigSectionName, err.Error())
+		return errors.NewCommonEdgeX(errors.Kind(err), fmt.Sprintf("unable to load '%s' custom configuration", CustomConfigSectionName), err)
 	}
 
 	lc.Debugf("Custom config is: %v", d.serviceConfig)
@@ -65,6 +68,7 @@ func (d *Driver) Initialize(lc logger.LoggingClient, asyncCh chan<- *sdkModel.As
 	}
 
 	return nil
+
 }
 
 // Callback function provided to ListenForCustomConfigChanges to update

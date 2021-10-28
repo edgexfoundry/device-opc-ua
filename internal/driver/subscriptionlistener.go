@@ -36,6 +36,10 @@ func (d *Driver) startSubscriptionListener() error {
 	d.ctxCancel = cancel
 
 	ds := service.RunningService()
+	if ds == nil {
+		return fmt.Errorf("[Incoming listener] unable to get running device service")
+	}
+
 	device, err := ds.GetDeviceByName(deviceName)
 	if err != nil {
 		return err
@@ -66,6 +70,7 @@ func (d *Driver) startSubscriptionListener() error {
 
 	client := opcua.NewClient(ep.EndpointURL, opts...)
 	if err := client.Connect(ctx); err != nil {
+		d.Logger.Warnf("[Incoming listener] Failed to connect OPCUA client, %s", err)
 		return err
 	}
 	defer client.Close()
@@ -127,23 +132,28 @@ func (d *Driver) startSubscriptionListener() error {
 			case *ua.DataChangeNotification:
 				for _, item := range x.MonitoredItems {
 					data := item.Value.Value.Value()
-					d.onIncomingDataReceived(data, d.resourceMap[item.ClientHandle])
+					if err := d.onIncomingDataReceived(data, d.resourceMap[item.ClientHandle]); err != nil {
+						d.Logger.Errorf("%v", err)
+					}
 				}
 			}
 		}
 	}
 }
 
-func (d *Driver) onIncomingDataReceived(data interface{}, nodeResourceName string) {
+func (d *Driver) onIncomingDataReceived(data interface{}, nodeResourceName string) error {
 	deviceName := d.serviceConfig.OPCUAServer.DeviceName
 	reading := data
 
 	ds := service.RunningService()
+	if ds == nil {
+		return fmt.Errorf("[Incoming listener] unable to get running device service")
+	}
 
 	deviceResource, ok := ds.DeviceResource(deviceName, nodeResourceName)
 	if !ok {
 		d.Logger.Warnf("[Incoming listener] Incoming reading ignored. No DeviceObject found: name=%v deviceResource=%v value=%v", deviceName, nodeResourceName, data)
-		return
+		return nil
 	}
 
 	req := models.CommandRequest{
@@ -154,7 +164,7 @@ func (d *Driver) onIncomingDataReceived(data interface{}, nodeResourceName strin
 	result, err := newResult(req, reading)
 	if err != nil {
 		d.Logger.Warnf("[Incoming listener] Incoming reading ignored. name=%v deviceResource=%v value=%v", deviceName, nodeResourceName, data)
-		return
+		return nil
 	}
 
 	asyncValues := &models.AsyncValues{
@@ -166,4 +176,5 @@ func (d *Driver) onIncomingDataReceived(data interface{}, nodeResourceName strin
 
 	d.AsyncCh <- asyncValues
 
+	return nil
 }

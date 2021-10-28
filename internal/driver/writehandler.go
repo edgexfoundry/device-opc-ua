@@ -31,11 +31,15 @@ func (d *Driver) HandleWriteCommands(deviceName string, protocols map[string]mod
 	ctx := context.Background()
 	client := opcua.NewClient(endpoint, opcua.SecurityMode(ua.MessageSecurityModeNone))
 	if err := client.Connect(ctx); err != nil {
-		d.Logger.Warnf("Driver.HandleWriteCommands: Failed to create OPCUA client, %s", err)
+		d.Logger.Warnf("Driver.HandleWriteCommands: Failed to connect OPCUA client, %s", err)
 		return err
 	}
 	defer client.Close()
 
+	return d.processWriteCommands(client, reqs, params)
+}
+
+func (d *Driver) processWriteCommands(client *opcua.Client, reqs []sdkModel.CommandRequest, params []*sdkModel.CommandValue) error {
 	for _, req := range reqs {
 		// handle every reqs every params
 		for _, param := range params {
@@ -45,10 +49,9 @@ func (d *Driver) HandleWriteCommands(deviceName string, protocols map[string]mod
 				return err
 			}
 		}
-
 	}
 
-	return err
+	return nil
 }
 
 func (d *Driver) handleWriteCommandRequest(deviceClient *opcua.Client, req sdkModel.CommandRequest,
@@ -68,8 +71,8 @@ func (d *Driver) handleWriteCommandRequest(deviceClient *opcua.Client, req sdkMo
 	if err != nil {
 		return err
 	}
-	v, err := ua.NewVariant(value)
 
+	v, err := ua.NewVariant(value)
 	if err != nil {
 		return fmt.Errorf("Driver.handleWriteCommands: invalid value: %v", err)
 	}
