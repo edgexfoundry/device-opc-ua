@@ -1,0 +1,45 @@
+# Copyright 2017 Dell Inc. All rights reserved.
+name: "OPCUA-Server"
+manufacturer: "Burning"
+model: "1"
+labels:
+  - "OPCUA"
+  - "test"
+description: "Simulation results of OPCUA Server"
+deviceResources:
+  -
+    name: "Counter1"
+    description: "generated counter number"
+    properties:
+      valueType: "Int32"
+      readWrite: "RW"
+      defaultValue: "0"
+      minimum: "0"
+      maximum: "100"
+    attributes:
+      { namespace: "5", symbol: "Counter1" }
+  -
+    name: "Random1"
+    description: "generated random number"
+    properties:
+      valueType: "Float64"
+      readWrite: "R"
+      defaultValue: "0.00"
+      minimum: "0.00"
+      maximum: "100.00"
+    attributes:
+      { namespace: "5", symbol: "Random1" }
+
+deviceCommands:
+  -
+    name: "CounterNum"
+    isHidden: false
+    readWrite: "RW"
+    resourceOperations:
+      - { deviceResource: "Counter1", defaultValue: "0" }
+  -
+    name: "RandomNum"
+    isHidden: false
+    readWrite: "R"
+    resourceOperations:
+      - { deviceResource: "Random1", defaultValue: "0.00" }

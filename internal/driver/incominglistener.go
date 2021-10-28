@@ -1,4 +1,3 @@
-//
 package driver
 
 import (
@@ -6,43 +5,40 @@ import (
 	"fmt"
 	"time"
 
-	sdk "github.com/edgexfoundry/device-sdk-go"
-	sdkModel "github.com/edgexfoundry/device-sdk-go/pkg/models"
+	"github.com/edgexfoundry/device-sdk-go/v2/pkg/models"
+	"github.com/edgexfoundry/device-sdk-go/v2/pkg/service"
 	"github.com/gopcua/opcua"
 	"github.com/gopcua/opcua/ua"
 )
 
-var service *sdk.Service
-
 func startIncomingListening() error {
 
 	var (
-		devicename = driver.Config.DeviceName
-		policy     = driver.Config.Policy
-		mode       = driver.Config.Mode
-		certFile   = driver.Config.CertFile
-		keyFile    = driver.Config.KeyFile
-		nodeID     = driver.Config.NodeID
+		devicename = driver.serviceConfig.OPCUAServer.DeviceName
+		policy     = driver.serviceConfig.OPCUAServer.Policy
+		mode       = driver.serviceConfig.OPCUAServer.Mode
+		certFile   = driver.serviceConfig.OPCUAServer.CertFile
+		keyFile    = driver.serviceConfig.OPCUAServer.KeyFile
+		nodeID     = driver.serviceConfig.OPCUAServer.NodeID
 	)
 
-	service = sdk.RunningService()
+	service := service.RunningService()
 	device, err := service.GetDeviceByName(devicename)
 	if err != nil {
 		return err
 	}
-	connectionInfo, err := CreateConnectionInfo(device.Protocols)
+	endpoint, err := fetchEndpoint(device.Protocols)
 	if err != nil {
 		return err
 	}
 	ctx := context.Background()
 
-	endpoints, err := opcua.GetEndpoints(connectionInfo.Endpoint)
+	endpoints, err := opcua.GetEndpoints(endpoint)
 	if err != nil {
 		return err
 	}
 	ep := opcua.SelectEndpoint(endpoints, policy, ua.MessageSecurityModeFromString(mode))
-	// replace Burning-Laptop with ip adress
-	ep.EndpointURL = connectionInfo.Endpoint
+	ep.EndpointURL = endpoint
 	if ep == nil {
 		return fmt.Errorf("Failed to find suitable endpoint")
 	}
@@ -62,9 +58,10 @@ func startIncomingListening() error {
 	}
 	defer client.Close()
 
-	sub, err := client.Subscribe(&opcua.SubscriptionParameters{
-		Interval: 500 * time.Millisecond,
-	})
+	sub, err := client.Subscribe(
+		&opcua.SubscriptionParameters{
+			Interval: 500 * time.Millisecond,
+		}, nil)
 	if err != nil {
 		return err
 	}
@@ -112,21 +109,21 @@ func startIncomingListening() error {
 }
 
 func onIncomingDataReceived(data interface{}) {
-	deviceName := driver.Config.DeviceName
-	cmd := driver.Config.NodeID
+	deviceName := driver.serviceConfig.OPCUAServer.DeviceName
+	cmd := driver.serviceConfig.OPCUAServer.NodeID
 	reading := data
 
+	service := service.RunningService()
 
-
-	deviceObject, ok := service.DeviceResource(deviceName, cmd, "get")
+	deviceObject, ok := service.DeviceResource(deviceName, cmd)
 	if !ok {
 		driver.Logger.Warn(fmt.Sprintf("[Incoming listener] Incoming reading ignored. No DeviceObject found: name=%v deviceResource=%v value=%v", deviceName, cmd, data))
 		return
 	}
 
-	req := sdkModel.CommandRequest{
+	req := models.CommandRequest{
 		DeviceResourceName: cmd,
-		Type:               sdkModel.ParseValueType(deviceObject.Properties.Value.Type),
+		Type:               deviceObject.Properties.ValueType,
 	}
 
 	result, err := newResult(req, reading)
@@ -136,9 +133,9 @@ func onIncomingDataReceived(data interface{}) {
 		return
 	}
 
-	asyncValues := &sdkModel.AsyncValues{
+	asyncValues := &models.AsyncValues{
 		DeviceName:    deviceName,
-		CommandValues: []*sdkModel.CommandValue{result},
+		CommandValues: []*models.CommandValue{result},
 	}
 
 	driver.Logger.Info(fmt.Sprintf("[Incoming listener] Incoming reading received: name=%v deviceResource=%v value=%v", deviceName, cmd, data))

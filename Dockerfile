@@ -3,26 +3,28 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 #
-FROM golang:1.11-alpine AS builder
-WORKDIR /go/src/github.com/edgexfoundry/device-opcua-go
-
-# Replicate the APK repository override.
-RUN sed -e 's/dl-cdn[.]alpinelinux.org/mirrors.ustc.edu.cn/g' -i~ /etc/apk/repositories
+FROM golang:1.16-alpine3.12 AS builder
+WORKDIR /device-opcua-go
 
 # Install our build time packages.
-RUN apk update && apk add make git
+RUN apk update && apk add --no-cache make git zeromq-dev gcc pkgconfig musl-dev
 
 COPY . .
 
 RUN make build
 
 # Next image - Copy built Go binary into new workspace
-FROM scratch
+FROM alpine:3.12
+
+# dumb-init needed for injected secure bootstrapping entrypoint script when run in secure mode.
+RUN apk add --update --no-cache zeromq dumb-init
 
 # expose command data port
-EXPOSE 49997
+EXPOSE 59997
 
-COPY --from=builder /go/src/github.com/edgexfoundry/device-opcua-go/cmd/device-opcua /
-COPY --from=builder /go/src/github.com/edgexfoundry/device-opcua-go/cmd/res/docker/configuration.toml /res/docker/configuration.toml
+COPY --from=builder /device-opcua-go/cmd/device-opcua /
+COPY --from=builder /device-opcua-go/cmd/res /res
+COPY LICENSE /
 
-CMD ["/device-opcua", "--profile=docker", "--confdir=/res"]
+ENTRYPOINT ["/device-opcua"]
+CMD ["--cp=consul://edgex-core-consul:8500", "--registry", "--confdir=/res"]

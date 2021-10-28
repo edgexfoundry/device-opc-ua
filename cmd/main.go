@@ -8,13 +8,13 @@
 package main
 
 import (
-	"github.com/edgexfoundry/device-opcua-go"
+	device_opcua "github.com/edgexfoundry/device-opcua-go"
 	"github.com/edgexfoundry/device-opcua-go/internal/driver"
-	"github.com/edgexfoundry/device-sdk-go/pkg/startup"
+	"github.com/edgexfoundry/device-sdk-go/v2/pkg/startup"
 )
 
 const (
-	serviceName string = "edgex-device-opcua"
+	serviceName string = "device-opcua"
 )
 
 func main() {

@@ -1,78 +1,90 @@
-// set OPCUA Server Nodes configuration
 package driver
 
 import (
 	"fmt"
-	"github.com/edgexfoundry/go-mod-core-contracts/models"
-	"reflect"
-	"strconv"
+
+	"github.com/edgexfoundry/go-mod-core-contracts/v2/errors"
+	"github.com/edgexfoundry/go-mod-core-contracts/v2/models"
 )
 
-type ConnectionInfo struct {
-	Endpoint     		string
+// ServiceConfig configuration struct
+type ServiceConfig struct {
+	OPCUAServer OPCUAServerConfig
 }
 
-type configuration struct {
-	DeviceName		string
-	Policy 			string
-	Mode  			string
-	CertFile	 	string
-	KeyFile 		string
-	NodeID 			string
-}
-
-// CreateDriverConfig use to load driver config for incoming listener and response listener
-func CreateDriverConfig(configMap map[string]string) (*configuration, error) {
-
-	config := new(configuration)
-
-	err := load(configMap, config)
-	if err != nil {
-		return config, err
-	}
-	return config, nil
-}
-
-// CreateConnectionInfo use to load MQTT connectionInfo for read and write command
-func CreateConnectionInfo(protocols map[string]models.ProtocolProperties) (*ConnectionInfo, error) {
-	info := new(ConnectionInfo)
-	protocol, ok := protocols["opcua"]
+// UpdateFromRaw updates the service's full configuration from raw data received from
+// the Service Provider.
+func (sw *ServiceConfig) UpdateFromRaw(rawConfig interface{}) bool {
+	configuration, ok := rawConfig.(*ServiceConfig)
 	if !ok {
-		return info, fmt.Errorf("unable to load config, 'opcua' not exist")
+		return false
 	}
 
-	err := load(protocol, info)
-	if err != nil {
-		return info, err
-	}
-	return info, nil
+	*sw = *configuration
+
+	return true
 }
 
-// load by reflect to check map key and then fetch the value
-func load(config map[string]string, des interface{}) error {
-	errorMessage := "unable to load config, '%s' not exist"
-	val := reflect.ValueOf(des).Elem()
-	for i := 0; i < val.NumField(); i++ {
-		typeField := val.Type().Field(i)
-		valueField := val.Field(i)
+// OPCUAServerConfig server information defined by the device profile
+type OPCUAServerConfig struct {
+	DeviceName string
+	Policy     string
+	Mode       string
+	CertFile   string
+	KeyFile    string
+	NodeID     string
+}
 
-		val, ok := config[typeField.Name]
-		if !ok {
-			return fmt.Errorf(errorMessage, typeField.Name)
+var policies map[string]int = map[string]int{
+	"None":           1,
+	"Basic128Rsa15":  2,
+	"Basic256":       3,
+	"Basic256Sha256": 4,
+}
+
+var modes map[string]int = map[string]int{
+	"None":           1,
+	"Sign":           2,
+	"SignAndEncrypt": 3,
+}
+
+// Validate ensures your custom configuration has proper values.
+func (info *OPCUAServerConfig) Validate() errors.EdgeX {
+	if info.DeviceName == "" {
+		return errors.NewCommonEdgeX(errors.KindContractInvalid, "OPCUAServerInfo.DeviceName configuration setting cannot be blank", nil)
+	}
+
+	if _, ok := policies[info.Policy]; !ok {
+		return errors.NewCommonEdgeX(errors.KindContractInvalid, "OPCUAServerInfo.Policy configuration setting mismatch", nil)
+	}
+	if _, ok := modes[info.Mode]; !ok {
+		return errors.NewCommonEdgeX(errors.KindContractInvalid, "OPCUAServerInfo.Mode configuration setting mismatch", nil)
+	}
+	if info.Mode != "None" || info.Policy != "None" {
+		if info.CertFile == "" {
+			return errors.NewCommonEdgeX(errors.KindContractInvalid, "OPCUAServerInfo.CertFile configuration setting cannot be blank when a security mode or policy is set", nil)
 		}
-
-		switch valueField.Kind() {
-		case reflect.Int:
-			intVal, err := strconv.Atoi(val)
-			if err != nil {
-				return err
-			}
-			valueField.SetInt(int64(intVal))
-		case reflect.String:
-			valueField.SetString(val)
-		default:
-			return fmt.Errorf("none supported value type %v ,%v", valueField.Kind(), typeField.Name)
+		if info.KeyFile == "" {
+			return errors.NewCommonEdgeX(errors.KindContractInvalid, "OPCUAServerInfo.KeyFile configuration setting cannot be blank when a security mode or policy is set", nil)
 		}
 	}
+
+	// NodeID is only necessary if defining a subscription at connection time in the configuration
+	// if info.NodeID == "" {
+	// 	return errors.NewCommonEdgeX(errors.KindContractInvalid, "OPCUAServerInfo.NodeID configuration setting cannot be blank", nil)
+	// }
+
 	return nil
+}
+
+func fetchEndpoint(protocols map[string]models.ProtocolProperties) (string, errors.EdgeX) {
+	properties, ok := protocols[Protocol]
+	if !ok {
+		return "", errors.NewCommonEdgeX(errors.KindContractInvalid, fmt.Sprintf("'%s' protocol properties is not defined", Protocol), nil)
+	}
+	endpoint, ok := properties[Endpoint]
+	if !ok {
+		return "", errors.NewCommonEdgeX(errors.KindContractInvalid, fmt.Sprintf("'%s' not found in the '%s' protocol properties", Endpoint, Protocol), nil)
+	}
+	return endpoint, nil
 }

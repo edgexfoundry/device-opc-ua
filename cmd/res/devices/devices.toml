@@ -1,0 +1,9 @@
+# Pre-define Devices
+[[DeviceList]]
+  Name = "SimulationServer"
+  ProfileName = "OPCUA-Server"
+  Description = "OPCUA device is created for test purpose"
+  Labels = [ "test" ]
+  [DeviceList.Protocols]
+      [DeviceList.Protocols.opcua]
+          Endpoint = "opc.tcp://node-red:55880/OPCUA/SimulationServer"

@@ -9,7 +9,7 @@
 ###
 # Launches all EdgeX Go binaries (must be previously built).
 #
-# Expects that Consul and MongoDB are already installed and running.
+# Expects that Consul is already installed and running.
 #
 ###
 
@@ -25,6 +25,6 @@ exec -a edgex-device-opcua ./device-opcua &
 cd $DIR
 
 
-trap cleanup EXIT
+trap cleanup TERM QUIT INT
 
 while : ; do sleep 1 ; done

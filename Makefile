@@ -1,6 +1,6 @@
 .PHONY: build test clean docker run
 
-GO=CGO_ENABLED=0 GO111MODULE=on go
+GO=CGO_ENABLED=1 GO111MODULE=on go
 
 MICROSERVICES=cmd/device-opcua
 
@@ -27,7 +27,7 @@ clean:
 docker:
 	docker build \
 		--label "git_sha=$(GIT_SHA)" \
-		-t edgexfoundry/docker-device-opcua-go:$(VERSION)-dev \
+		-t edgexfoundry/device-opcua-go:$(VERSION)-dev \
 		.
 
 run:
