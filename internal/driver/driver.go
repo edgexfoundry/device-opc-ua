@@ -34,6 +34,8 @@ type Driver struct {
 	AsyncCh          chan<- *sdkModel.AsyncValues
 	CommandResponses sync.Map
 	serviceConfig    *ServiceConfig
+	resourceMap      map[uint32]string
+	ctxCancel        context.CancelFunc
 }
 
 // NewProtocolDriver returns a new protocol driver object
@@ -44,12 +46,12 @@ func NewProtocolDriver() sdkModel.ProtocolDriver {
 	return driver
 }
 
-// Initialize performs protocol-specific initialization for the device
-// service.
+// Initialize performs protocol-specific initialization for the device service
 func (d *Driver) Initialize(lc logger.LoggingClient, asyncCh chan<- *sdkModel.AsyncValues, deviceCh chan<- []sdkModel.DiscoveredDevice) error {
 	d.Logger = lc
 	d.AsyncCh = asyncCh
 	d.serviceConfig = &ServiceConfig{}
+	d.resourceMap = make(map[uint32]string)
 
 	ds := service.RunningService()
 
@@ -63,15 +65,41 @@ func (d *Driver) Initialize(lc logger.LoggingClient, asyncCh chan<- *sdkModel.As
 		return errors.NewCommonEdgeXWrapper(err)
 	}
 
-	go func() {
-		// Sleep long enough for the device to be fully registered
-		time.Sleep(time.Second * time.Duration(2))
-		err := d.startIncomingListening()
-		if err != nil {
-			panic(fmt.Errorf("Driver.Initialize: Start incoming data Listener failed: %v", err))
-		}
-	}()
+	if err := ds.ListenForCustomConfigChanges(&d.serviceConfig.OPCUAServer.Writable, WritableInfoSectionName, d.updateWritableConfig); err != nil {
+		return errors.NewCommonEdgeX(errors.Kind(err), fmt.Sprintf("unable to listen for changes for '%s' custom configuration", WritableInfoSectionName), err)
+	}
+
 	return nil
+}
+
+func (d *Driver) start() {
+	err := d.startIncomingListening()
+	if err != nil {
+		d.Logger.Errorf("Driver.Initialize: Start incoming data Listener failed: %v", err)
+	}
+}
+
+func (d *Driver) updateWritableConfig(rawWritableConfig interface{}) {
+	updated, ok := rawWritableConfig.(*WritableInfo)
+	if !ok {
+		d.Logger.Error("unable to update writable config: Cannot cast raw config to type 'WritableInfo'")
+		return
+	}
+
+	d.cleanup()
+
+	d.serviceConfig.OPCUAServer.Writable = *updated
+
+	go d.start()
+}
+
+// Close the existing context.
+// This, in turn, cancels the existing subscription if it exists
+func (d *Driver) cleanup() {
+	if d.ctxCancel != nil {
+		d.ctxCancel()
+		d.ctxCancel = nil
+	}
 }
 
 // AddDevice is a callback function that is invoked
@@ -314,7 +342,8 @@ func (d *Driver) handleWriteCommandRequest(deviceClient *opcua.Client, req sdkMo
 // for closing any in-use channels, including the channel used to send async
 // readings (if supported).
 func (d *Driver) Stop(force bool) error {
-	d.Logger.Warn("Driver's Stop function not implemented")
+	d.resourceMap = make(map[uint32]string)
+	d.cleanup()
 	return nil
 }
 

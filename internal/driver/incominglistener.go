@@ -3,6 +3,7 @@ package driver
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/edgexfoundry/device-sdk-go/v2/pkg/models"
@@ -19,8 +20,19 @@ func (d *Driver) startIncomingListening() error {
 		mode       = d.serviceConfig.OPCUAServer.Mode
 		certFile   = d.serviceConfig.OPCUAServer.CertFile
 		keyFile    = d.serviceConfig.OPCUAServer.KeyFile
-		nodeID     = d.serviceConfig.OPCUAServer.NodeID
+		resources  = d.serviceConfig.OPCUAServer.Writable.Resources
 	)
+
+	// No need to start a subscription if there are no resources to monitor
+	if len(resources) == 0 {
+		d.Logger.Info("[Incoming listener] No resources defined to generate subscriptions.")
+		return nil
+	}
+
+	// Create a cancelable context for Writable configuration
+	ctxBg := context.Background()
+	ctx, cancel := context.WithCancel(ctxBg)
+	d.ctxCancel = cancel
 
 	ds := service.RunningService()
 	device, err := ds.GetDeviceByName(deviceName)
@@ -31,7 +43,6 @@ func (d *Driver) startIncomingListening() error {
 	if err != nil {
 		return err
 	}
-	ctx := context.Background()
 
 	endpoints, err := opcua.GetEndpoints(endpoint)
 	if err != nil {
@@ -40,7 +51,7 @@ func (d *Driver) startIncomingListening() error {
 	ep := opcua.SelectEndpoint(endpoints, policy, ua.MessageSecurityModeFromString(mode))
 	ep.EndpointURL = endpoint
 	if ep == nil {
-		return fmt.Errorf("Failed to find suitable endpoint")
+		return fmt.Errorf("[Incoming listener] Failed to find suitable endpoint")
 	}
 
 	opts := []opcua.Option{
@@ -67,30 +78,34 @@ func (d *Driver) startIncomingListening() error {
 	}
 	defer sub.Cancel()
 
-	deviceResource, ok := ds.DeviceResource(deviceName, nodeID)
-	if !ok {
-		return fmt.Errorf("[Incoming listener] Unable to find device resource with name %s", nodeID)
-	}
+	for i, node := range strings.Split(resources, ",") {
+		deviceResource, ok := ds.DeviceResource(deviceName, node)
+		if !ok {
+			return fmt.Errorf("[Incoming listener] Unable to find device resource with name %s", node)
+		}
 
-	opcuaNodeID, err := buildNodeID(deviceResource.Attributes, SYMBOL)
-	if err != nil {
-		return err
-	}
+		opcuaNodeID, err := buildNodeID(deviceResource.Attributes, SYMBOL)
+		if err != nil {
+			return err
+		}
 
-	id, err := ua.ParseNodeID(opcuaNodeID)
-	if err != nil {
-		return err
-	}
+		id, err := ua.ParseNodeID(opcuaNodeID)
+		if err != nil {
+			return err
+		}
 
-	// arbitrary client handle for the monitoring item
-	handle := uint32(42) // arbitrary client id
-	miCreateRequest := opcua.NewMonitoredItemCreateRequestWithDefaults(id, ua.AttributeIDValue, handle)
-	res, err := sub.Monitor(ua.TimestampsToReturnBoth, miCreateRequest)
-	if err != nil || res.Results[0].StatusCode != ua.StatusOK {
-		return err
-	}
+		// arbitrary client handle for the monitoring item
+		handle := uint32(i + 42)
+		// map the client handle so we know what the value returned represents
+		d.resourceMap[handle] = node
+		miCreateRequest := opcua.NewMonitoredItemCreateRequestWithDefaults(id, ua.AttributeIDValue, handle)
+		res, err := sub.Monitor(ua.TimestampsToReturnBoth, miCreateRequest)
+		if err != nil || res.Results[0].StatusCode != ua.StatusOK {
+			return err
+		}
 
-	d.Logger.Info("[Incoming listener] Start incoming data listening.")
+		d.Logger.Infof("[Incoming listener] Start incoming data listening for %s.", node)
+	}
 
 	go sub.Run(ctx) // start Publish loop
 
@@ -103,7 +118,7 @@ func (d *Driver) startIncomingListening() error {
 			// receive Publish Notification Data
 		case res := <-sub.Notifs:
 			if res.Error != nil {
-				d.Logger.Debugf("%s", res.Error)
+				d.Logger.Debug(res.Error.Error())
 				continue
 			}
 			switch x := res.Value.(type) {
@@ -111,16 +126,15 @@ func (d *Driver) startIncomingListening() error {
 			case *ua.DataChangeNotification:
 				for _, item := range x.MonitoredItems {
 					data := item.Value.Value.Value()
-					d.onIncomingDataReceived(data)
+					d.onIncomingDataReceived(data, d.resourceMap[item.ClientHandle])
 				}
 			}
 		}
 	}
 }
 
-func (d *Driver) onIncomingDataReceived(data interface{}) {
+func (d *Driver) onIncomingDataReceived(data interface{}, nodeResourceName string) {
 	deviceName := d.serviceConfig.OPCUAServer.DeviceName
-	nodeResourceName := d.serviceConfig.OPCUAServer.NodeID
 	reading := data
 
 	ds := service.RunningService()

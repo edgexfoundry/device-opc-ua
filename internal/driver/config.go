@@ -32,7 +32,12 @@ type OPCUAServerConfig struct {
 	Mode       string
 	CertFile   string
 	KeyFile    string
-	NodeID     string
+	Writable   WritableInfo
+}
+
+// WritableInfo configuration data that can be written without restarting the service
+type WritableInfo struct {
+	Resources string
 }
 
 var policies map[string]int = map[string]int{
@@ -68,11 +73,6 @@ func (info *OPCUAServerConfig) Validate() errors.EdgeX {
 			return errors.NewCommonEdgeX(errors.KindContractInvalid, "OPCUAServerInfo.KeyFile configuration setting cannot be blank when a security mode or policy is set", nil)
 		}
 	}
-
-	// NodeID is only necessary if defining a subscription at connection time in the configuration
-	// if info.NodeID == "" {
-	// 	return errors.NewCommonEdgeX(errors.KindContractInvalid, "OPCUAServerInfo.NodeID configuration setting cannot be blank", nil)
-	// }
 
 	return nil
 }

@@ -6,7 +6,7 @@ This repository is a Go-based EdgeX Foundry Device Service which uses OPC-UA pro
 
 ## Features
 
-1. Subscribe to a single variable
+1. Subscribe/Unsubscribe one or more variables (writable configuration)
 2. Execute read command
 3. Execute write command
 4. Execute method (using Read command of device SDK)
@@ -41,12 +41,13 @@ Modify `configuration.toml` file found under the `./cmd/res` folder if needed
 ```toml
 # Driver configs
 [OPCUAServer]
-  DeviceName = "SimulationServer"   # Name of Devcice exited
-  Policy = "None"                   # Security policy: None, Basic128Rsa15, Basic256, Basic256Sha256. Default: auto
-  Mode = "None"                     # Security mode: None, Sign, SignAndEncrypt. Default: auto
-  CertFile = ""                     # Path to cert.pem. Required for security mode/policy != None
-  KeyFile = ""                      # Path to private key.pem. Required for security mode/policy != None
-  NodeID = "Counter1"               # Node id to subscribe to. Must match deviceResource name.
+DeviceName = "SimulationServer"   # Name of Devcice exited
+Policy = "None"                   # Security policy: None, Basic128Rsa15, Basic256, Basic256Sha256. Default: auto
+Mode = "None"                     # Security mode: None, Sign, SignAndEncrypt. Default: auto
+CertFile = ""                     # Path to cert.pem. Required for security mode/policy != None
+KeyFile = ""                      # Path to private key.pem. Required for security mode/policy != None
+  [OPCUAServer.Writable]
+  Resources = "Counter1,Random1"    # Device resources related to Node IDs to subscribe to (comma-separated values)
 ```
 
 ## Devic Profile
