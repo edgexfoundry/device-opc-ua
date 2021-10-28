@@ -5,11 +5,11 @@ import (
 	"testing"
 
 	"github.com/edgexfoundry/device-opcua-go/internal/config"
+	"github.com/edgexfoundry/device-opcua-go/internal/test"
 	sdkModel "github.com/edgexfoundry/device-sdk-go/v2/pkg/models"
 	"github.com/edgexfoundry/go-mod-core-contracts/v2/clients/logger"
 	"github.com/edgexfoundry/go-mod-core-contracts/v2/common"
 	"github.com/edgexfoundry/go-mod-core-contracts/v2/models"
-	"github.com/gopcua/opcua"
 )
 
 func TestDriver_HandleWriteCommands(t *testing.T) {
@@ -34,40 +34,19 @@ func TestDriver_HandleWriteCommands(t *testing.T) {
 			wantErr: true,
 		},
 		{
-			name: "OK - no connection to client",
+			name: "NOK - invalid endpoint defined",
 			args: args{
 				deviceName: "Test",
-				protocols:  map[string]models.ProtocolProperties{config.Protocol: {config.Endpoint: "opc.tcp://test"}},
+				protocols:  map[string]models.ProtocolProperties{config.Protocol: {config.Endpoint: test.Protocol + "unknown"}},
 				reqs:       []sdkModel.CommandRequest{{DeviceResourceName: "TestVar1"}},
 			},
 			wantErr: true,
 		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			d := &Driver{
-				Logger: &logger.MockLogger{},
-			}
-			if err := d.HandleWriteCommands(tt.args.deviceName, tt.args.protocols, tt.args.reqs, tt.args.params); (err != nil) != tt.wantErr {
-				t.Errorf("Driver.HandleWriteCommands() error = %v, wantErr %v", err, tt.wantErr)
-			}
-		})
-	}
-}
-
-func TestDriver_processCommands(t *testing.T) {
-	type args struct {
-		reqs   []sdkModel.CommandRequest
-		params []*sdkModel.CommandValue
-	}
-	tests := []struct {
-		name    string
-		args    args
-		wantErr bool
-	}{
 		{
 			name: "NOK - invalid node id",
 			args: args{
+				deviceName: "Test",
+				protocols:  map[string]models.ProtocolProperties{config.Protocol: {config.Endpoint: test.Protocol + test.Address}},
 				reqs: []sdkModel.CommandRequest{{
 					DeviceResourceName: "TestResource1",
 					Attributes:         map[string]interface{}{NAMESPACE: "2"},
@@ -84,9 +63,11 @@ func TestDriver_processCommands(t *testing.T) {
 		{
 			name: "NOK - invalid value",
 			args: args{
+				deviceName: "Test",
+				protocols:  map[string]models.ProtocolProperties{config.Protocol: {config.Endpoint: test.Protocol + test.Address}},
 				reqs: []sdkModel.CommandRequest{{
 					DeviceResourceName: "TestResource1",
-					Attributes:         map[string]interface{}{NAMESPACE: "2", SYMBOL: "edgex/int32/test1"},
+					Attributes:         map[string]interface{}{NAMESPACE: "2", SYMBOL: "rw_int32"},
 					Type:               common.ValueTypeInt32,
 				}},
 				params: []*sdkModel.CommandValue{{
@@ -98,11 +79,13 @@ func TestDriver_processCommands(t *testing.T) {
 			wantErr: true,
 		},
 		{
-			name: "OK - command request with one parameter (no mock client)",
+			name: "OK - command request with one parameter",
 			args: args{
+				deviceName: "Test",
+				protocols:  map[string]models.ProtocolProperties{config.Protocol: {config.Endpoint: test.Protocol + test.Address}},
 				reqs: []sdkModel.CommandRequest{{
 					DeviceResourceName: "TestResource1",
-					Attributes:         map[string]interface{}{NAMESPACE: "2", SYMBOL: "edgex/int32/test1"},
+					Attributes:         map[string]interface{}{NAMESPACE: "2", SYMBOL: "rw_int32"},
 					Type:               common.ValueTypeInt32,
 				}},
 				params: []*sdkModel.CommandValue{{
@@ -111,16 +94,20 @@ func TestDriver_processCommands(t *testing.T) {
 					Value:              int32(42),
 				}},
 			},
-			wantErr: true,
+			wantErr: false,
 		},
 	}
+
+	server := test.NewServer("../test/opcua_server.py")
+	defer server.Close()
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			d := &Driver{
 				Logger: &logger.MockLogger{},
 			}
-			if err := d.processWriteCommands(opcua.NewClient("opc.tcp//test"), tt.args.reqs, tt.args.params); (err != nil) != tt.wantErr {
-				t.Errorf("Driver.processCommands() error = %v, wantErr %v", err, tt.wantErr)
+			if err := d.HandleWriteCommands(tt.args.deviceName, tt.args.protocols, tt.args.reqs, tt.args.params); (err != nil) != tt.wantErr {
+				t.Errorf("Driver.HandleWriteCommands() error = %v, wantErr %v", err, tt.wantErr)
 			}
 		})
 	}

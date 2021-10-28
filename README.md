@@ -50,7 +50,7 @@ KeyFile = ""                      # Path to private key.pem. Required for securi
   Resources = "Counter1,Random1"    # Device resources related to Node IDs to subscribe to (comma-separated values)
 ```
 
-## Devic Profile
+## Device Profile
 
 A Device Profile can be thought of as a template of a type or classification of a Device.
 
@@ -67,6 +67,29 @@ make run
 
 ```bash
 make docker
+```
+
+## Testing
+
+Running unit tests starts a mock OPCUA server on port `48408`.
+
+The mock server defines the following attributes:
+
+| Variable Name | Type | Default Value | Writable |
+|-|-|-|-|
+|`ro_bool`|`Boolean`|`True`||
+|`rw_bool`|`Boolean`|`True`|✅|
+|`ro_int32`|`Int32`|`5`||
+|`rw_int32`|`Int32`|`5`|✅|
+|`square`|`Method`|`Int64` (return value)||
+
+All attributes are defined in `ns=2`.
+
+```bash
+# Install requirements (if necessary)
+python3 -m pip install opcua
+# Run tests
+make test
 ```
 
 ## Reference
