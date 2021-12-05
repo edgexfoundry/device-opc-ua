@@ -91,6 +91,7 @@ func newResult(req sdkModel.CommandRequest, reading interface{}) (*sdkModel.Comm
 		}
 	default:
 		err = fmt.Errorf("return result fail, none supported value type: %v", req.Type)
+		return nil, err
 	}
 
 	result, err = sdkModel.NewCommandValue(req.DeviceResourceName, req.Type, val)
@@ -134,20 +135,20 @@ func checkUintValueRange(valueType string, val uint64) bool {
 	var isValid = false
 	switch valueType {
 	case common.ValueTypeUint8:
-		if val >= 0 && val <= math.MaxUint8 {
+		if val <= math.MaxUint8 {
 			isValid = true
 		}
 	case common.ValueTypeUint16:
-		if val >= 0 && val <= math.MaxUint16 {
+		if val <= math.MaxUint16 {
 			isValid = true
 		}
 	case common.ValueTypeUint32:
-		if val >= 0 && val <= math.MaxUint32 {
+		if val <= math.MaxUint32 {
 			isValid = true
 		}
 	case common.ValueTypeUint64:
 		maxiMum := uint64(math.MaxUint64)
-		if val >= 0 && val <= maxiMum {
+		if val <= maxiMum {
 			isValid = true
 		}
 	}
@@ -170,9 +171,7 @@ func checkIntValueRange(valueType string, val int64) bool {
 			isValid = true
 		}
 	case common.ValueTypeInt64:
-		if val >= math.MinInt64 && val <= math.MaxInt64 {
-			isValid = true
-		}
+		isValid = true
 	}
 	return isValid
 }

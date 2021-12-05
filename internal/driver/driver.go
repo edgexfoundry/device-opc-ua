@@ -142,10 +142,10 @@ func (d *Driver) Stop(force bool) error {
 // based on attributes of a device resource
 func buildNodeID(attrs map[string]interface{}, sKey string) (string, error) {
 	if _, ok := attrs[NAMESPACE]; !ok {
-		return "", fmt.Errorf("Attribute %s does not exist", NAMESPACE)
+		return "", fmt.Errorf("attribute %s does not exist", NAMESPACE)
 	}
 	if _, ok := attrs[sKey]; !ok {
-		return "", fmt.Errorf("Attribute %s does not exist", sKey)
+		return "", fmt.Errorf("attribute %s does not exist", sKey)
 	}
 
 	return fmt.Sprintf("ns=%s;s=%s", attrs[NAMESPACE].(string), attrs[sKey].(string)), nil

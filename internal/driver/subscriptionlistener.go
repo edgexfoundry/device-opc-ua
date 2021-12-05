@@ -62,10 +62,10 @@ func (d *Driver) startSubscriptionListener() error {
 		return err
 	}
 	ep := opcua.SelectEndpoint(endpoints, policy, ua.MessageSecurityModeFromString(mode))
-	ep.EndpointURL = endpoint
 	if ep == nil {
 		return fmt.Errorf("[Incoming listener] Failed to find suitable endpoint")
 	}
+	ep.EndpointURL = endpoint
 
 	opts := []opcua.Option{
 		opcua.SecurityPolicy(policy),
