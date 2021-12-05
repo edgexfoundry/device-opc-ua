@@ -24,13 +24,18 @@ import (
 var once sync.Once
 var driver *Driver
 
+type safeResourceMap struct {
+	res map[uint32]string
+	mu  sync.Mutex
+}
+
 // Driver struct
 type Driver struct {
 	Logger           logger.LoggingClient
 	AsyncCh          chan<- *sdkModel.AsyncValues
 	CommandResponses sync.Map
 	serviceConfig    *config.ServiceConfig
-	resourceMap      map[uint32]string
+	resourceMap      safeResourceMap
 	ctxCancel        context.CancelFunc
 }
 
@@ -47,7 +52,9 @@ func (d *Driver) Initialize(lc logger.LoggingClient, asyncCh chan<- *sdkModel.As
 	d.Logger = lc
 	d.AsyncCh = asyncCh
 	d.serviceConfig = &config.ServiceConfig{}
-	d.resourceMap = make(map[uint32]string)
+	d.resourceMap.mu.Lock()
+	d.resourceMap.res = make(map[uint32]string)
+	d.resourceMap.mu.Unlock()
 
 	ds := service.RunningService()
 	if ds == nil {
@@ -133,7 +140,9 @@ func (d *Driver) RemoveDevice(deviceName string, protocols map[string]models.Pro
 // for closing any in-use channels, including the channel used to send async
 // readings (if supported).
 func (d *Driver) Stop(force bool) error {
-	d.resourceMap = make(map[uint32]string)
+	d.resourceMap.mu.Lock()
+	d.resourceMap.res = nil
+	d.resourceMap.mu.Unlock()
 	d.cleanup()
 	return nil
 }

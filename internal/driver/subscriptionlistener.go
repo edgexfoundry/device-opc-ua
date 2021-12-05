@@ -111,7 +111,9 @@ func (d *Driver) startSubscriptionListener() error {
 		// arbitrary client handle for the monitoring item
 		handle := uint32(i + 42)
 		// map the client handle so we know what the value returned represents
-		d.resourceMap[handle] = node
+		d.resourceMap.mu.Lock()
+		d.resourceMap.res[handle] = node
+		d.resourceMap.mu.Unlock()
 		miCreateRequest := opcua.NewMonitoredItemCreateRequestWithDefaults(id, ua.AttributeIDValue, handle)
 		res, err := sub.Monitor(ua.TimestampsToReturnBoth, miCreateRequest)
 		if err != nil || res.Results[0].StatusCode != ua.StatusOK {
@@ -140,7 +142,10 @@ func (d *Driver) startSubscriptionListener() error {
 			case *ua.DataChangeNotification:
 				for _, item := range x.MonitoredItems {
 					data := item.Value.Value.Value()
-					if err := d.onIncomingDataReceived(data, d.resourceMap[item.ClientHandle]); err != nil {
+					d.resourceMap.mu.Lock()
+					nodeName := d.resourceMap.res[item.ClientHandle]
+					d.resourceMap.mu.Unlock()
+					if err := d.onIncomingDataReceived(data, nodeName); err != nil {
 						d.Logger.Errorf("%v", err)
 					}
 				}
