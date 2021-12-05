@@ -70,12 +70,8 @@ TokenFile = "/tmp/edgex/secrets/device-opcua/secrets-token.json"
   [SecretStore.Authentication]
   AuthType = "X-Vault-Token"
 
-[Logging]
-EnableRemote = false
-File = "./device-opcua.log"
-
 [Writable]
-LogLevel = "DEBUG"
+LogLevel = "INFO"
   # InsecureSecrets are required for when Redis is used for message bus
   [Writable.InsecureSecrets]
     [Writable.InsecureSecrets.Sample]
