@@ -15,8 +15,9 @@ import (
 	"time"
 
 	"github.com/edgexfoundry/device-opcua-go/internal/config"
-	"github.com/edgexfoundry/device-sdk-go/v2/pkg/models"
+	sdkModels "github.com/edgexfoundry/device-sdk-go/v2/pkg/models"
 	"github.com/edgexfoundry/device-sdk-go/v2/pkg/service"
+	"github.com/edgexfoundry/go-mod-core-contracts/v2/models"
 	"github.com/gopcua/opcua"
 	"github.com/gopcua/opcua/ua"
 )
@@ -25,10 +26,6 @@ func (d *Driver) startSubscriptionListener() error {
 
 	var (
 		deviceName = d.serviceConfig.OPCUAServer.DeviceName
-		policy     = d.serviceConfig.OPCUAServer.Policy
-		mode       = d.serviceConfig.OPCUAServer.Mode
-		certFile   = d.serviceConfig.OPCUAServer.CertFile
-		keyFile    = d.serviceConfig.OPCUAServer.KeyFile
 		resources  = d.serviceConfig.OPCUAServer.Writable.Resources
 	)
 
@@ -52,31 +49,12 @@ func (d *Driver) startSubscriptionListener() error {
 	if err != nil {
 		return err
 	}
-	endpoint, err := config.FetchEndpoint(device.Protocols)
+
+	client, err := d.getClient(device)
 	if err != nil {
 		return err
 	}
 
-	endpoints, err := opcua.GetEndpoints(endpoint)
-	if err != nil {
-		return err
-	}
-	ep := opcua.SelectEndpoint(endpoints, policy, ua.MessageSecurityModeFromString(mode))
-	if ep == nil {
-		return fmt.Errorf("[Incoming listener] Failed to find suitable endpoint")
-	}
-	ep.EndpointURL = endpoint
-
-	opts := []opcua.Option{
-		opcua.SecurityPolicy(policy),
-		opcua.SecurityModeString(mode),
-		opcua.CertificateFile(certFile),
-		opcua.PrivateKeyFile(keyFile),
-		opcua.AuthAnonymous(),
-		opcua.SecurityFromEndpoint(ep, ua.UserTokenTypeAnonymous),
-	}
-
-	client := opcua.NewClient(ep.EndpointURL, opts...)
 	if err := client.Connect(ctx); err != nil {
 		d.Logger.Warnf("[Incoming listener] Failed to connect OPCUA client, %s", err)
 		return err
@@ -91,6 +69,77 @@ func (d *Driver) startSubscriptionListener() error {
 		return err
 	}
 	defer sub.Cancel()
+
+	if err := d.configureMonitoredItems(sub, resources, deviceName); err != nil {
+		return err
+	}
+
+	go sub.Run(ctx) // start Publish loop
+
+	// read from subscription's notification channel until ctx is cancelled
+	for {
+		select {
+		// context return
+		case <-ctx.Done():
+			return nil
+			// receive Publish Notification Data
+		case res := <-sub.Notifs:
+			if res.Error != nil {
+				d.Logger.Debug(res.Error.Error())
+				continue
+			}
+			switch x := res.Value.(type) {
+			// result type: DateChange StatusChange
+			case *ua.DataChangeNotification:
+				d.handleDataChange(x)
+			}
+		}
+	}
+}
+
+func (d *Driver) getClient(device models.Device) (*opcua.Client, error) {
+	var (
+		policy   = d.serviceConfig.OPCUAServer.Policy
+		mode     = d.serviceConfig.OPCUAServer.Mode
+		certFile = d.serviceConfig.OPCUAServer.CertFile
+		keyFile  = d.serviceConfig.OPCUAServer.KeyFile
+	)
+
+	endpoint, xerr := config.FetchEndpoint(device.Protocols)
+	if xerr != nil {
+		return nil, xerr
+	}
+
+	endpoints, err := opcua.GetEndpoints(endpoint)
+	if err != nil {
+		return nil, err
+	}
+	ep := opcua.SelectEndpoint(endpoints, policy, ua.MessageSecurityModeFromString(mode))
+	if ep == nil {
+		return nil, fmt.Errorf("[Incoming listener] Failed to find suitable endpoint")
+	}
+	ep.EndpointURL = endpoint
+
+	opts := []opcua.Option{
+		opcua.SecurityPolicy(policy),
+		opcua.SecurityModeString(mode),
+		opcua.CertificateFile(certFile),
+		opcua.PrivateKeyFile(keyFile),
+		opcua.AuthAnonymous(),
+		opcua.SecurityFromEndpoint(ep, ua.UserTokenTypeAnonymous),
+	}
+
+	return opcua.NewClient(ep.EndpointURL, opts...), nil
+}
+
+func (d *Driver) configureMonitoredItems(sub *opcua.Subscription, resources, deviceName string) error {
+	ds := service.RunningService()
+	if ds == nil {
+		return fmt.Errorf("[Incoming listener] unable to get running device service")
+	}
+
+	d.mu.Lock()
+	defer d.mu.Unlock()
 
 	for i, node := range strings.Split(resources, ",") {
 		deviceResource, ok := ds.DeviceResource(deviceName, node)
@@ -111,9 +160,7 @@ func (d *Driver) startSubscriptionListener() error {
 		// arbitrary client handle for the monitoring item
 		handle := uint32(i + 42)
 		// map the client handle so we know what the value returned represents
-		d.resourceMap.mu.Lock()
-		d.resourceMap.res[handle] = node
-		d.resourceMap.mu.Unlock()
+		d.resourceMap[handle] = node
 		miCreateRequest := opcua.NewMonitoredItemCreateRequestWithDefaults(id, ua.AttributeIDValue, handle)
 		res, err := sub.Monitor(ua.TimestampsToReturnBoth, miCreateRequest)
 		if err != nil || res.Results[0].StatusCode != ua.StatusOK {
@@ -123,33 +170,18 @@ func (d *Driver) startSubscriptionListener() error {
 		d.Logger.Infof("[Incoming listener] Start incoming data listening for %s.", node)
 	}
 
-	go sub.Run(ctx) // start Publish loop
+	return nil
+}
 
-	// read from subscription's notification channel until ctx is cancelled
-	for {
-		select {
-		// context return
-		case <-ctx.Done():
-			return nil
-			// receive Publish Notification Data
-		case res := <-sub.Notifs:
-			if res.Error != nil {
-				d.Logger.Debug(res.Error.Error())
-				continue
-			}
-			switch x := res.Value.(type) {
-			// result type: DateChange StatusChange
-			case *ua.DataChangeNotification:
-				for _, item := range x.MonitoredItems {
-					data := item.Value.Value.Value()
-					d.resourceMap.mu.Lock()
-					nodeName := d.resourceMap.res[item.ClientHandle]
-					d.resourceMap.mu.Unlock()
-					if err := d.onIncomingDataReceived(data, nodeName); err != nil {
-						d.Logger.Errorf("%v", err)
-					}
-				}
-			}
+func (d *Driver) handleDataChange(dcn *ua.DataChangeNotification) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+
+	for _, item := range dcn.MonitoredItems {
+		data := item.Value.Value.Value()
+		nodeName := d.resourceMap[item.ClientHandle]
+		if err := d.onIncomingDataReceived(data, nodeName); err != nil {
+			d.Logger.Errorf("%v", err)
 		}
 	}
 }
@@ -169,7 +201,7 @@ func (d *Driver) onIncomingDataReceived(data interface{}, nodeResourceName strin
 		return nil
 	}
 
-	req := models.CommandRequest{
+	req := sdkModels.CommandRequest{
 		DeviceResourceName: nodeResourceName,
 		Type:               deviceResource.Properties.ValueType,
 	}
@@ -180,9 +212,9 @@ func (d *Driver) onIncomingDataReceived(data interface{}, nodeResourceName strin
 		return nil
 	}
 
-	asyncValues := &models.AsyncValues{
+	asyncValues := &sdkModels.AsyncValues{
 		DeviceName:    deviceName,
-		CommandValues: []*models.CommandValue{result},
+		CommandValues: []*sdkModels.CommandValue{result},
 	}
 
 	d.Logger.Infof("[Incoming listener] Incoming reading received: name=%v deviceResource=%v value=%v", deviceName, nodeResourceName, data)
