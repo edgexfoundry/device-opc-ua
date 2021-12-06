@@ -31,12 +31,11 @@ type safeResourceMap struct {
 
 // Driver struct
 type Driver struct {
-	Logger           logger.LoggingClient
-	AsyncCh          chan<- *sdkModel.AsyncValues
-	CommandResponses sync.Map
-	serviceConfig    *config.ServiceConfig
-	resourceMap      safeResourceMap
-	ctxCancel        context.CancelFunc
+	Logger        logger.LoggingClient
+	AsyncCh       chan<- *sdkModel.AsyncValues
+	serviceConfig *config.ServiceConfig
+	resourceMap   safeResourceMap
+	ctxCancel     context.CancelFunc
 }
 
 // NewProtocolDriver returns a new protocol driver object
