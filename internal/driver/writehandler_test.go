@@ -55,7 +55,7 @@ func TestDriver_HandleWriteCommands(t *testing.T) {
 				protocols:  map[string]models.ProtocolProperties{config.Protocol: {config.Endpoint: test.Protocol + test.Address}},
 				reqs: []sdkModel.CommandRequest{{
 					DeviceResourceName: "TestResource1",
-					Attributes:         map[string]interface{}{NAMESPACE: "2"},
+					Attributes:         map[string]interface{}{NODE: "2"},
 					Type:               common.ValueTypeInt32,
 				}},
 				params: []*sdkModel.CommandValue{{
@@ -73,7 +73,7 @@ func TestDriver_HandleWriteCommands(t *testing.T) {
 				protocols:  map[string]models.ProtocolProperties{config.Protocol: {config.Endpoint: test.Protocol + test.Address}},
 				reqs: []sdkModel.CommandRequest{{
 					DeviceResourceName: "TestResource1",
-					Attributes:         map[string]interface{}{NAMESPACE: "2", SYMBOL: "rw_int32"},
+					Attributes:         map[string]interface{}{NODE: "ns=2;s=rw_int32"},
 					Type:               common.ValueTypeInt32,
 				}},
 				params: []*sdkModel.CommandValue{{
@@ -91,7 +91,7 @@ func TestDriver_HandleWriteCommands(t *testing.T) {
 				protocols:  map[string]models.ProtocolProperties{config.Protocol: {config.Endpoint: test.Protocol + test.Address}},
 				reqs: []sdkModel.CommandRequest{{
 					DeviceResourceName: "TestResource1",
-					Attributes:         map[string]interface{}{NAMESPACE: "2", SYMBOL: "rw_int32"},
+					Attributes:         map[string]interface{}{NODE: "ns=2;s=rw_int32"},
 					Type:               common.ValueTypeInt32,
 				}},
 				params: []*sdkModel.CommandValue{{

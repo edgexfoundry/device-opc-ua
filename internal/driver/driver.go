@@ -142,15 +142,11 @@ func (d *Driver) Stop(force bool) error {
 	return nil
 }
 
-// Build a NodeID string in the form of ns=_;s=_
-// based on attributes of a device resource
-func buildNodeID(attrs map[string]interface{}, sKey string) (string, error) {
-	if _, ok := attrs[NAMESPACE]; !ok {
-		return "", fmt.Errorf("attribute %s does not exist", NAMESPACE)
-	}
-	if _, ok := attrs[sKey]; !ok {
-		return "", fmt.Errorf("attribute %s does not exist", sKey)
+func getNodeID(attrs map[string]interface{}, id string) (string, error) {
+	identifier, ok := attrs[id]
+	if !ok {
+		return "", fmt.Errorf("attribute %s does not exist", id)
 	}
 
-	return fmt.Sprintf("ns=%s;s=%s", attrs[NAMESPACE].(string), attrs[sKey].(string)), nil
+	return identifier.(string), nil
 }

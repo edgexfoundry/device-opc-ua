@@ -61,7 +61,7 @@ func TestDriver_HandleReadCommands(t *testing.T) {
 				},
 				reqs: []sdkModel.CommandRequest{{
 					DeviceResourceName: "TestVar1",
-					Attributes:         map[string]interface{}{NAMESPACE: "2", SYMBOL: "fake"},
+					Attributes:         map[string]interface{}{NODE: "ns=2;s=fake"},
 					Type:               common.ValueTypeInt32,
 				}},
 			},
@@ -77,7 +77,7 @@ func TestDriver_HandleReadCommands(t *testing.T) {
 				},
 				reqs: []sdkModel.CommandRequest{{
 					DeviceResourceName: "TestResource1",
-					Attributes:         map[string]interface{}{NAMESPACE: "2"},
+					Attributes:         map[string]interface{}{NODE: "2"},
 					Type:               common.ValueTypeInt32,
 				}},
 			},
@@ -93,7 +93,7 @@ func TestDriver_HandleReadCommands(t *testing.T) {
 				},
 				reqs: []sdkModel.CommandRequest{{
 					DeviceResourceName: "TestResource1",
-					Attributes:         map[string]interface{}{NAMESPACE: "2", METHOD: "test"},
+					Attributes:         map[string]interface{}{METHOD: "ns=2;s=test"},
 					Type:               common.ValueTypeInt32,
 				}},
 			},
@@ -109,7 +109,7 @@ func TestDriver_HandleReadCommands(t *testing.T) {
 				},
 				reqs: []sdkModel.CommandRequest{{
 					DeviceResourceName: "TestResource1",
-					Attributes:         map[string]interface{}{NAMESPACE: "2", METHOD: "test", OBJECT: "main"},
+					Attributes:         map[string]interface{}{METHOD: "ns=2;s=test", OBJECT: "ns=2;s=main"},
 					Type:               common.ValueTypeInt32,
 				}},
 			},
@@ -125,7 +125,7 @@ func TestDriver_HandleReadCommands(t *testing.T) {
 				},
 				reqs: []sdkModel.CommandRequest{{
 					DeviceResourceName: "TestVar1",
-					Attributes:         map[string]interface{}{NAMESPACE: "2", SYMBOL: "ro_int32"},
+					Attributes:         map[string]interface{}{NODE: "ns=2;s=ro_int32"},
 					Type:               common.ValueTypeInt32,
 				}},
 			},
@@ -146,7 +146,7 @@ func TestDriver_HandleReadCommands(t *testing.T) {
 				},
 				reqs: []sdkModel.CommandRequest{{
 					DeviceResourceName: "SquareResource",
-					Attributes:         map[string]interface{}{NAMESPACE: "2", METHOD: "square", OBJECT: "main", INPUTMAP: []interface{}{"2"}},
+					Attributes:         map[string]interface{}{METHOD: "ns=2;s=square", OBJECT: "ns=2;s=main", INPUTMAP: []interface{}{"2"}},
 					Type:               common.ValueTypeInt64,
 				}},
 			},

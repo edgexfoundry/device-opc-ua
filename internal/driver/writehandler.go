@@ -61,7 +61,7 @@ func (d *Driver) processWriteCommands(client *opcua.Client, reqs []sdkModel.Comm
 
 func (d *Driver) handleWriteCommandRequest(deviceClient *opcua.Client, req sdkModel.CommandRequest,
 	param *sdkModel.CommandValue) error {
-	nodeID, err := buildNodeID(req.Attributes, SYMBOL)
+	nodeID, err := getNodeID(req.Attributes, NODE)
 	if err != nil {
 		return fmt.Errorf("Driver.handleWriteCommands: %v", err)
 	}

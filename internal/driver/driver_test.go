@@ -160,10 +160,10 @@ func TestDriver_Stop(t *testing.T) {
 	}
 }
 
-func Test_buildNodeID(t *testing.T) {
+func Test_getNodeID(t *testing.T) {
 	type args struct {
 		attrs map[string]interface{}
-		sKey  string
+		id    string
 	}
 	tests := []struct {
 		name    string
@@ -172,27 +172,21 @@ func Test_buildNodeID(t *testing.T) {
 		wantErr bool
 	}{
 		{
-			name:    "NOK - namespace does not exist",
-			args:    args{attrs: map[string]interface{}{}},
-			want:    "",
-			wantErr: true,
-		},
-		{
 			name:    "NOK - key does not exist",
-			args:    args{attrs: map[string]interface{}{NAMESPACE: "2"}, sKey: "fail"},
+			args:    args{attrs: map[string]interface{}{NODE: "ns=2"}, id: "fail"},
 			want:    "",
 			wantErr: true,
 		},
 		{
-			name:    "OK - node id built",
-			args:    args{attrs: map[string]interface{}{NAMESPACE: "2", SYMBOL: "edgex/int32/var0"}, sKey: SYMBOL},
+			name:    "OK - node id returned",
+			args:    args{attrs: map[string]interface{}{NODE: "ns=2;s=edgex/int32/var0"}, id: NODE},
 			want:    "ns=2;s=edgex/int32/var0",
 			wantErr: false,
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := buildNodeID(tt.args.attrs, tt.args.sKey)
+			got, err := getNodeID(tt.args.attrs, tt.args.id)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("buildNodeID() error = %v, wantErr %v", err, tt.wantErr)
 				return

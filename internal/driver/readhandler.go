@@ -76,7 +76,7 @@ func (d *Driver) handleReadCommandRequest(deviceClient *opcua.Client, req sdkMod
 }
 
 func makeReadRequest(deviceClient *opcua.Client, req sdkModel.CommandRequest) (*sdkModel.CommandValue, error) {
-	nodeID, err := buildNodeID(req.Attributes, SYMBOL)
+	nodeID, err := getNodeID(req.Attributes, NODE)
 	if err != nil {
 		return nil, fmt.Errorf("Driver.handleReadCommands: %v", err)
 	}
@@ -109,7 +109,7 @@ func makeReadRequest(deviceClient *opcua.Client, req sdkModel.CommandRequest) (*
 func makeMethodCall(deviceClient *opcua.Client, req sdkModel.CommandRequest) (*sdkModel.CommandValue, error) {
 	var inputs []*ua.Variant
 
-	objectID, err := buildNodeID(req.Attributes, OBJECT)
+	objectID, err := getNodeID(req.Attributes, OBJECT)
 	if err != nil {
 		return nil, fmt.Errorf("Driver.handleReadCommands: %v", err)
 	}
@@ -118,7 +118,7 @@ func makeMethodCall(deviceClient *opcua.Client, req sdkModel.CommandRequest) (*s
 		return nil, fmt.Errorf("Driver.handleReadCommands: %v", err)
 	}
 
-	methodID, err := buildNodeID(req.Attributes, METHOD)
+	methodID, err := getNodeID(req.Attributes, METHOD)
 	if err != nil {
 		return nil, fmt.Errorf("Driver.handleReadCommands: %v", err)
 	}

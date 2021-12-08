@@ -15,14 +15,12 @@ const (
 )
 
 const (
-	// NAMESPACE attribute
-	NAMESPACE = "namespace"
-	// SYMBOL attribute
-	SYMBOL = "symbol"
-	// OBJECT attribute
-	OBJECT = "object"
-	// METHOD attribute
-	METHOD = "method"
+	// NODE id attribute
+	NODE = "nodeId"
+	// OBJECT node id attribute
+	OBJECT = "objectId"
+	// METHOD node id attribute
+	METHOD = "methodId"
 	// INPUTMAP attribute
 	INPUTMAP = "inputMap"
 )

@@ -50,8 +50,8 @@ PublishTopicPrefix = "edgex/events/device" # /<device-profile-name>/<device-name
 DataTransform = true
 MaxCmdOps = 128
 MaxCmdValueLen = 256
-DevicesDir = "/res/devices"
-ProfilesDir = "/res/profiles"
+DevicesDir = "./res/devices"
+ProfilesDir = "./res/profiles"
 UpdateLastConnected = false
 Labels = []
 EnableAsyncReadings = true
@@ -88,4 +88,4 @@ Mode = "None"                     # Security mode: None, Sign, SignAndEncrypt. D
 CertFile = ""                     # Path to cert.pem. Required for security mode/policy != None
 KeyFile = ""                      # Path to private key.pem. Required for security mode/policy != None
   [OPCUAServer.Writable]
-  Resources = "Counter1,Random1"    # Device resources related to Node IDs to subscribe to (comma-separated values)
+  Resources = "Counter,Random"    # Device resources related to Node IDs to subscribe to (comma-separated values)

@@ -147,7 +147,7 @@ func (d *Driver) configureMonitoredItems(sub *opcua.Subscription, resources, dev
 			return fmt.Errorf("[Incoming listener] Unable to find device resource with name %s", node)
 		}
 
-		opcuaNodeID, err := buildNodeID(deviceResource.Attributes, SYMBOL)
+		opcuaNodeID, err := getNodeID(deviceResource.Attributes, NODE)
 		if err != nil {
 			return err
 		}
