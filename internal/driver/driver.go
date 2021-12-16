@@ -2,38 +2,39 @@
 //
 // Copyright (C) 2018 Canonical Ltd
 // Copyright (C) 2018 IOTech Ltd
+// Copyright (C) 2021 Schneider Electric
 //
 // SPDX-License-Identifier: Apache-2.0
 
-//
 package driver
 
 import (
 	"context"
 	"fmt"
-	"log"
 	"sync"
-	"time"
 
-	"github.com/edgexfoundry/device-sdk-go"
-	sdkModel "github.com/edgexfoundry/device-sdk-go/pkg/models"
-	"github.com/edgexfoundry/go-mod-core-contracts/clients/logger"
-	"github.com/edgexfoundry/go-mod-core-contracts/models"
-	"github.com/gopcua/opcua"
-	"github.com/gopcua/opcua/ua"
-	"github.com/spf13/cast"
+	"github.com/edgexfoundry/device-opcua-go/internal/config"
+	sdkModel "github.com/edgexfoundry/device-sdk-go/v2/pkg/models"
+	"github.com/edgexfoundry/device-sdk-go/v2/pkg/service"
+	"github.com/edgexfoundry/go-mod-core-contracts/v2/clients/logger"
+	"github.com/edgexfoundry/go-mod-core-contracts/v2/errors"
+	"github.com/edgexfoundry/go-mod-core-contracts/v2/models"
 )
 
 var once sync.Once
 var driver *Driver
 
+// Driver struct
 type Driver struct {
-	Logger           logger.LoggingClient
-	AsyncCh          chan<- *sdkModel.AsyncValues
-	CommandResponses sync.Map
-	Config           *configuration
+	Logger        logger.LoggingClient
+	AsyncCh       chan<- *sdkModel.AsyncValues
+	serviceConfig *config.ServiceConfig
+	resourceMap   map[uint32]string
+	mu            sync.Mutex
+	ctxCancel     context.CancelFunc
 }
 
+// NewProtocolDriver returns a new protocol driver object
 func NewProtocolDriver() sdkModel.ProtocolDriver {
 	once.Do(func() {
 		driver = new(Driver)
@@ -41,315 +42,111 @@ func NewProtocolDriver() sdkModel.ProtocolDriver {
 	return driver
 }
 
-// Initialize performs protocol-specific initialization for the device
-// service.
-func (d *Driver) Initialize(lc logger.LoggingClient, asyncCh chan<- *sdkModel.AsyncValues) error {
+// Initialize performs protocol-specific initialization for the device service
+func (d *Driver) Initialize(lc logger.LoggingClient, asyncCh chan<- *sdkModel.AsyncValues, deviceCh chan<- []sdkModel.DiscoveredDevice) error {
 	d.Logger = lc
 	d.AsyncCh = asyncCh
-	config, err := CreateDriverConfig(device.DriverConfigs())
-	if err != nil {
-		panic(fmt.Errorf("Driver.Initialize: Read OPCUA driver configuration failed: %v", err))
-	}
-	d.Config = config
+	d.serviceConfig = &config.ServiceConfig{}
+	d.mu.Lock()
+	d.resourceMap = make(map[uint32]string)
+	d.mu.Unlock()
 
-	go func() {
-		err := startIncomingListening()
-		if err != nil {
-			panic(fmt.Errorf("Driver.Initialize: Start incoming data Listener failed: %v", err))
-		}
-	}()
+	ds := service.RunningService()
+	if ds == nil {
+		return errors.NewCommonEdgeXWrapper(fmt.Errorf("unable to get running device service"))
+	}
+
+	if err := ds.LoadCustomConfig(d.serviceConfig, CustomConfigSectionName); err != nil {
+		return errors.NewCommonEdgeX(errors.Kind(err), fmt.Sprintf("unable to load '%s' custom configuration", CustomConfigSectionName), err)
+	}
+
+	lc.Debugf("Custom config is: %v", d.serviceConfig)
+
+	if err := d.serviceConfig.OPCUAServer.Validate(); err != nil {
+		return errors.NewCommonEdgeXWrapper(err)
+	}
+
+	if err := ds.ListenForCustomConfigChanges(&d.serviceConfig.OPCUAServer.Writable, WritableInfoSectionName, d.updateWritableConfig); err != nil {
+		return errors.NewCommonEdgeX(errors.Kind(err), fmt.Sprintf("unable to listen for changes for '%s' custom configuration", WritableInfoSectionName), err)
+	}
+
 	return nil
 }
 
-func (d *Driver) DisconnectDevice(deviceName string, protocols map[string]models.ProtocolProperties) error {
-	d.Logger.Warn("Driver's DisconnectDevice function didn't implement")
+// Callback function provided to ListenForCustomConfigChanges to update
+// the configuration when OPCUAServer.Writable changes
+func (d *Driver) updateWritableConfig(rawWritableConfig interface{}) {
+	updated, ok := rawWritableConfig.(*config.WritableInfo)
+	if !ok {
+		d.Logger.Error("unable to update writable config: Cannot cast raw config to type 'WritableInfo'")
+		return
+	}
+
+	d.cleanup()
+
+	d.serviceConfig.OPCUAServer.Writable = *updated
+
+	go d.startSubscriber()
+}
+
+// Start or restart the subscription listener
+func (d *Driver) startSubscriber() {
+	err := d.startSubscriptionListener()
+	if err != nil {
+		d.Logger.Errorf("Driver.Initialize: Start incoming data Listener failed: %v", err)
+	}
+}
+
+// Close the existing context.
+// This, in turn, cancels the existing subscription if it exists
+func (d *Driver) cleanup() {
+	if d.ctxCancel != nil {
+		d.ctxCancel()
+		d.ctxCancel = nil
+	}
+}
+
+// AddDevice is a callback function that is invoked
+// when a new Device associated with this Device Service is added
+func (d *Driver) AddDevice(deviceName string, protocols map[string]models.ProtocolProperties, adminState models.AdminState) error {
+	// Start subscription listener when device is added.
+	// This does not happen automatically like it does when the device is updated
+	go d.startSubscriber()
+	d.Logger.Debugf("Device %s is added", deviceName)
 	return nil
 }
 
-// HandleReadCommands triggers a protocol Read operation for the specified device.
-func (d *Driver) HandleReadCommands(deviceName string, protocols map[string]models.ProtocolProperties,
-	reqs []sdkModel.CommandRequest) ([]*sdkModel.CommandValue, error) {
-
-	driver.Logger.Debug(fmt.Sprintf("Driver.HandleReadCommands: protocols: %v resource: %v attributes: %v", protocols, reqs[0].DeviceResourceName, reqs[0].Attributes))
-	var responses = make([]*sdkModel.CommandValue, len(reqs))
-	var err error
-
-	// create device client and open connection
-	connectionInfo, err := CreateConnectionInfo(protocols)
-	ctx := context.Background()
-
-	client := opcua.NewClient(connectionInfo.Endpoint, opcua.SecurityMode(ua.MessageSecurityModeNone))
-	if err := client.Connect(ctx); err != nil {
-		log.Fatal(err)
-	}
-	defer client.Close()
-
-	for i, req := range reqs {
-		// handle every reqs
-		res, err := d.handleReadCommandRequest(client, req)
-		if err != nil {
-			driver.Logger.Error(fmt.Sprintf("Driver.HandleReadCommands: Handle read commands failed: %v", err))
-			return responses, err
-		}
-		responses[i] = res
-	}
-
-	return responses, err
-}
-
-func (d *Driver) handleReadCommandRequest(deviceClient *opcua.Client,
-	req sdkModel.CommandRequest) (*sdkModel.CommandValue, error) {
-	var result = &sdkModel.CommandValue{}
-	var err error
-	nodeID := req.DeviceResourceName
-
-	// get NewNodeID
-	id, err := ua.ParseNodeID(nodeID)
-	if err != nil {
-		driver.Logger.Error(fmt.Sprintf("Driver.handleReadCommands: Invalid node id=%s", nodeID))
-		return result, err
-	}
-
-	// make and execute ReadRequest
-	request := &ua.ReadRequest{
-		MaxAge: 2000,
-		NodesToRead: []*ua.ReadValueID{
-			&ua.ReadValueID{NodeID: id},
-		},
-		TimestampsToReturn: ua.TimestampsToReturnBoth,
-	}
-	resp, err := deviceClient.Read(request)
-	if err != nil {
-		driver.Logger.Error(fmt.Sprintf("Driver.handleReadCommands: Read failed: %s", err))
-	}
-	if resp.Results[0].Status != ua.StatusOK {
-		driver.Logger.Error(fmt.Sprintf("Driver.handleReadCommands: Status not OK: %v", resp.Results[0].Status))
-
-	}
-
-	// make new result
-	reading := resp.Results[0].Value.Value
-	result, err = newResult(req, reading)
-	if err != nil {
-		return result, err
-	} else {
-		driver.Logger.Info(fmt.Sprintf("Get command finished: %v", result))
-	}
-
-	return result, err
-}
-
-// HandleWriteCommands passes a slice of CommandRequest struct each representing
-// a ResourceOperation for a specific device resource (aka DeviceObject).
-// Since the commands are actuation commands, params provide parameters for the individual
-// command.
-func (d *Driver) HandleWriteCommands(deviceName string, protocols map[string]models.ProtocolProperties,
-	reqs []sdkModel.CommandRequest, params []*sdkModel.CommandValue) error {
-
-	driver.Logger.Debug(fmt.Sprintf("SimpleDriver.HandleWriteCommands: protocols: %v, resource: %v, parameters: %v", protocols, reqs[0].DeviceResourceName, params))
-	var err error
-
-	// create device client and open connection
-	connectionInfo, err := CreateConnectionInfo(protocols)
-	ctx := context.Background()
-	c := opcua.NewClient(connectionInfo.Endpoint, opcua.SecurityMode(ua.MessageSecurityModeNone))
-	if err := c.Connect(ctx); err != nil {
-		driver.Logger.Warn(fmt.Sprintf("Driver.HandleWriteCommands: Failed to create OPCUA client, %s", err))
-		return  err
-	}
-
-	for _, req := range reqs {
-		// handle every reqs every params
-		for _, param := range params {
-			err := d.handleWeadCommandRequest(c, req, param)
-			if err != nil {
-				driver.Logger.Error(fmt.Sprintf("Driver.HandleWriteCommands: Handle write commands failed: %v", err))
-				return  err
-			}
-		}
-
-	}
-
-	return err
-}
-
-func (d *Driver) handleWeadCommandRequest(deviceClient *opcua.Client, req sdkModel.CommandRequest,
-	param *sdkModel.CommandValue) error {
-	var err error
-	nodeID := req.DeviceResourceName
-
-	// get NewNodeID
-	id, err := ua.ParseNodeID(nodeID)
-	if err != nil {
-		return fmt.Errorf(fmt.Sprintf("Driver.handleWriteCommands: Invalid node id=%s", nodeID))
-	}
-
-	value, err := newCommandValue(req.Type, param)
-	if err != nil {
-		return err
-	}
-	v, err := ua.NewVariant(value)
-
-	if err != nil {
-		return fmt.Errorf(fmt.Sprintf("Driver.handleWriteCommands: invalid value: %v", err))
-	}
-
-	request := &ua.WriteRequest{
-		NodesToWrite: []*ua.WriteValue{
-			&ua.WriteValue{
-				NodeID:      id,
-				AttributeID: ua.AttributeIDValue,
-				Value: &ua.DataValue{
-					EncodingMask: uint8(6),  // encoding mask
-					Value:        v,
-				},
-			},
-		},
-	}
-
-	resp, err := deviceClient.Write(request)
-	if err != nil {
-		driver.Logger.Error(fmt.Sprintf("Driver.handleWriteCommands: Write value %v failed: %s", v, err))
-		return err
-	}
-	driver.Logger.Info(fmt.Sprintf("Driver.handleWriteCommands: write sucessfully, ", resp.Results[0]))
+// UpdateDevice is a callback function that is invoked
+// when a Device associated with this Device Service is updated
+func (d *Driver) UpdateDevice(deviceName string, protocols map[string]models.ProtocolProperties, adminState models.AdminState) error {
+	d.Logger.Debugf("Device %s is updated", deviceName)
 	return nil
 }
 
+// RemoveDevice is a callback function that is invoked
+// when a Device associated with this Device Service is removed
+func (d *Driver) RemoveDevice(deviceName string, protocols map[string]models.ProtocolProperties) error {
+	d.Logger.Debugf("Device %s is removed", deviceName)
+	return nil
+}
 
 // Stop the protocol-specific DS code to shutdown gracefully, or
 // if the force parameter is 'true', immediately. The driver is responsible
 // for closing any in-use channels, including the channel used to send async
 // readings (if supported).
 func (d *Driver) Stop(force bool) error {
-	d.Logger.Warn("Driver's Stop function didn't implement")
+	d.mu.Lock()
+	d.resourceMap = nil
+	d.mu.Unlock()
+	d.cleanup()
 	return nil
 }
 
-func newResult(req sdkModel.CommandRequest, reading interface{}) (*sdkModel.CommandValue, error) {
-	var result = &sdkModel.CommandValue{}
-	var err error
-	var resTime = time.Now().UnixNano() / int64(time.Millisecond)
-	castError := "fail to parse %v reading, %v"
-
-	if !checkValueInRange(req.Type, reading) {
-		err = fmt.Errorf("parse reading fail. Reading %v is out of the value type(%v)'s range", reading, req.Type)
-		driver.Logger.Error(err.Error())
-		return result, err
+func getNodeID(attrs map[string]interface{}, id string) (string, error) {
+	identifier, ok := attrs[id]
+	if !ok {
+		return "", fmt.Errorf("attribute %s does not exist", id)
 	}
 
-	switch req.Type {
-	case sdkModel.Bool:
-		val, err := cast.ToBoolE(reading)
-		if err != nil {
-			return nil, fmt.Errorf(castError, req.DeviceResourceName, err)
-		}
-		result, err = sdkModel.NewBoolValue(req.DeviceResourceName, resTime, val)
-	case sdkModel.String:
-		val, err := cast.ToStringE(reading)
-		if err != nil {
-			return nil, fmt.Errorf(castError, req.DeviceResourceName, err)
-		}
-		result = sdkModel.NewStringValue(req.DeviceResourceName, resTime, val)
-	case sdkModel.Uint8:
-		val, err := cast.ToUint8E(reading)
-		if err != nil {
-			return nil, fmt.Errorf(castError, req.DeviceResourceName, err)
-		}
-		result, err = sdkModel.NewUint8Value(req.DeviceResourceName, resTime, val)
-	case sdkModel.Uint16:
-		val, err := cast.ToUint16E(reading)
-		if err != nil {
-			return nil, fmt.Errorf(castError, req.DeviceResourceName, err)
-		}
-		result, err = sdkModel.NewUint16Value(req.DeviceResourceName, resTime, val)
-	case sdkModel.Uint32:
-		val, err := cast.ToUint32E(reading)
-		if err != nil {
-			return nil, fmt.Errorf(castError, req.DeviceResourceName, err)
-		}
-		result, err = sdkModel.NewUint32Value(req.DeviceResourceName, resTime, val)
-	case sdkModel.Uint64:
-		val, err := cast.ToUint64E(reading)
-		if err != nil {
-			return nil, fmt.Errorf(castError, req.DeviceResourceName, err)
-		}
-		result, err = sdkModel.NewUint64Value(req.DeviceResourceName, resTime, val)
-	case sdkModel.Int8:
-		val, err := cast.ToInt8E(reading)
-		if err != nil {
-			return nil, fmt.Errorf(castError, req.DeviceResourceName, err)
-		}
-		result, err = sdkModel.NewInt8Value(req.DeviceResourceName, resTime, val)
-	case sdkModel.Int16:
-		val, err := cast.ToInt16E(reading)
-		if err != nil {
-			return nil, fmt.Errorf(castError, req.DeviceResourceName, err)
-		}
-		result, err = sdkModel.NewInt16Value(req.DeviceResourceName, resTime, val)
-	case sdkModel.Int32:
-		val, err := cast.ToInt32E(reading)
-		if err != nil {
-			return nil, fmt.Errorf(castError, req.DeviceResourceName, err)
-		}
-		result, err = sdkModel.NewInt32Value(req.DeviceResourceName, resTime, val)
-	case sdkModel.Int64:
-		val, err := cast.ToInt64E(reading)
-		if err != nil {
-			return nil, fmt.Errorf(castError, req.DeviceResourceName, err)
-		}
-		result, err = sdkModel.NewInt64Value(req.DeviceResourceName, resTime, val)
-	case sdkModel.Float32:
-		val, err := cast.ToFloat32E(reading)
-		if err != nil {
-			return nil, fmt.Errorf(castError, req.DeviceResourceName, err)
-		}
-		result, err = sdkModel.NewFloat32Value(req.DeviceResourceName, resTime, val)
-	case sdkModel.Float64:
-		val, err := cast.ToFloat64E(reading)
-		if err != nil {
-			return nil, fmt.Errorf(castError, req.DeviceResourceName, err)
-		}
-		result, err = sdkModel.NewFloat64Value(req.DeviceResourceName, resTime, val)
-	default:
-		err = fmt.Errorf("return result fail, none supported value type: %v", req.Type)
-	}
-
-	return result, err
-}
-
-
-func newCommandValue(valueType sdkModel.ValueType, param *sdkModel.CommandValue) (interface{}, error) {
-	var commandValue interface{}
-	var err error
-	switch valueType {
-	case sdkModel.Bool:
-		commandValue, err = param.BoolValue()
-	case sdkModel.String:
-		commandValue, err = param.StringValue()
-	case sdkModel.Uint8:
-		commandValue, err = param.Uint8Value()
-	case sdkModel.Uint16:
-		commandValue, err = param.Uint16Value()
-	case sdkModel.Uint32:
-		commandValue, err = param.Uint32Value()
-	case sdkModel.Uint64:
-		commandValue, err = param.Uint64Value()
-	case sdkModel.Int8:
-		commandValue, err = param.Int8Value()
-	case sdkModel.Int16:
-		commandValue, err = param.Int16Value()
-	case sdkModel.Int32:
-		commandValue, err = param.Int32Value()
-	case sdkModel.Int64:
-		commandValue, err = param.Int64Value()
-	case sdkModel.Float32:
-		commandValue, err = param.Float32Value()
-	case sdkModel.Float64:
-		commandValue, err = param.Float64Value()
-	default:
-		err = fmt.Errorf("fail to convert param, none supported value type: %v", valueType)
-	}
-
-	return commandValue, err
+	return identifier.(string), nil
 }

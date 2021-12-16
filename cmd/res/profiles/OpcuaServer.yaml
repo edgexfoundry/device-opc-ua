@@ -1,0 +1,44 @@
+name: "OPCUA-Server"
+manufacturer: "Prosys"
+model: "S1"
+labels:
+  - "OPCUA"
+  - "test"
+description: "Simulation results of OPCUA Server"
+deviceResources:
+  -
+    name: "Counter"
+    description: "generated counter number"
+    properties:
+      valueType: "Int32"
+      readWrite: "R"
+      defaultValue: "0"
+      minimum: "0"
+      maximum: "30"
+    attributes:
+      { nodeId: "ns=3;i=1001" }
+  -
+    name: "Random"
+    description: "generated random number"
+    properties:
+      valueType: "Float64"
+      readWrite: "R"
+      defaultValue: "0.0"
+      minimum: "-2.0"
+      maximum: "2.0"
+    attributes:
+      { nodeId: "ns=3;i=1002" }
+
+deviceCommands:
+  -
+    name: "CounterNum"
+    isHidden: false
+    readWrite: "R"
+    resourceOperations:
+      - { deviceResource: "Counter", defaultValue: "0" }
+  -
+    name: "RandomNum"
+    isHidden: false
+    readWrite: "R"
+    resourceOperations:
+      - { deviceResource: "Random", defaultValue: "0.0" }
