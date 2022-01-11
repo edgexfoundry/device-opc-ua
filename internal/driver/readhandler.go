@@ -12,8 +12,9 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/edgexfoundry/device-opcua-go/internal/config"
 	sdkModel "github.com/edgexfoundry/device-sdk-go/v2/pkg/models"
+	"github.com/edgexfoundry/device-sdk-go/v2/pkg/service"
+	"github.com/edgexfoundry/go-mod-core-contracts/v2/errors"
 	"github.com/edgexfoundry/go-mod-core-contracts/v2/models"
 	"github.com/gopcua/opcua"
 	"github.com/gopcua/opcua/ua"
@@ -25,14 +26,22 @@ func (d *Driver) HandleReadCommands(deviceName string, protocols map[string]mode
 
 	d.Logger.Debugf("Driver.HandleReadCommands: protocols: %v resource: %v attributes: %v", protocols, reqs[0].DeviceResourceName, reqs[0].Attributes)
 
-	// create device client and open connection
-	endpoint, err := config.FetchEndpoint(protocols)
+	ds := service.RunningService()
+	if ds == nil {
+		return nil, errors.NewCommonEdgeXWrapper(fmt.Errorf("unable to get running device service"))
+	}
+
+	device, err := ds.GetDeviceByName(deviceName)
 	if err != nil {
 		return nil, err
 	}
-	ctx := context.Background()
 
-	client := opcua.NewClient(endpoint, opcua.SecurityMode(ua.MessageSecurityModeNone))
+	ctx := context.Background()
+	client, err := d.getClient(ctx, device)
+	if err != nil {
+		return nil, err
+	}
+
 	if err := client.Connect(ctx); err != nil {
 		d.Logger.Warnf("Driver.HandleReadCommands: Failed to connect OPCUA client, %s", err)
 		return nil, err

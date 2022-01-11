@@ -7,6 +7,7 @@
 package driver
 
 import (
+	"context"
 	"reflect"
 	"testing"
 
@@ -16,9 +17,11 @@ import (
 	"github.com/edgexfoundry/go-mod-core-contracts/v2/clients/logger"
 	"github.com/edgexfoundry/go-mod-core-contracts/v2/common"
 	"github.com/edgexfoundry/go-mod-core-contracts/v2/models"
+	"github.com/gopcua/opcua"
+	"github.com/gopcua/opcua/ua"
 )
 
-func TestDriver_HandleWriteCommands(t *testing.T) {
+func TestDriver_processWriteCommands(t *testing.T) {
 	type args struct {
 		deviceName string
 		protocols  map[string]models.ProtocolProperties
@@ -40,22 +43,13 @@ func TestDriver_HandleWriteCommands(t *testing.T) {
 			wantErr: true,
 		},
 		{
-			name: "NOK - invalid endpoint defined",
-			args: args{
-				deviceName: "Test",
-				protocols:  map[string]models.ProtocolProperties{config.Protocol: {config.Endpoint: test.Protocol + "unknown"}},
-				reqs:       []sdkModel.CommandRequest{{DeviceResourceName: "TestVar1"}},
-			},
-			wantErr: true,
-		},
-		{
 			name: "NOK - invalid node id",
 			args: args{
 				deviceName: "Test",
 				protocols:  map[string]models.ProtocolProperties{config.Protocol: {config.Endpoint: test.Protocol + test.Address}},
 				reqs: []sdkModel.CommandRequest{{
 					DeviceResourceName: "TestResource1",
-					Attributes:         map[string]interface{}{NODE: "2"},
+					Attributes:         map[string]interface{}{NODE: "ns=2;i=3;x=42"},
 					Type:               common.ValueTypeInt32,
 				}},
 				params: []*sdkModel.CommandValue{{
@@ -112,7 +106,16 @@ func TestDriver_HandleWriteCommands(t *testing.T) {
 			d := &Driver{
 				Logger: &logger.MockLogger{},
 			}
-			if err := d.HandleWriteCommands(tt.args.deviceName, tt.args.protocols, tt.args.reqs, tt.args.params); (err != nil) != tt.wantErr {
+			// create device client and open connection
+			endpoint, errx := config.FetchEndpoint(tt.args.protocols)
+			if errx != nil {
+				return
+			}
+			client := opcua.NewClient(endpoint, opcua.SecurityMode(ua.MessageSecurityModeNone))
+			client.Connect(context.Background())
+			defer client.Close()
+
+			if err := d.processWriteCommands(client, tt.args.reqs, tt.args.params); (err != nil) != tt.wantErr {
 				t.Errorf("Driver.HandleWriteCommands() error = %v, wantErr %v", err, tt.wantErr)
 			}
 		})

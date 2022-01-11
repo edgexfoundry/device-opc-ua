@@ -7,6 +7,7 @@
 package driver
 
 import (
+	"context"
 	"testing"
 
 	"github.com/edgexfoundry/device-opcua-go/internal/config"
@@ -74,7 +75,7 @@ func TestDriver_getClient(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			d := NewProtocolDriver().(*Driver)
 			d.serviceConfig = &config.ServiceConfig{}
-			_, err := d.getClient(tt.device)
+			_, err := d.getClient(context.Background(), tt.device)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("Driver.getClient() error = %v, wantErr %v", err, tt.wantErr)
 				return
