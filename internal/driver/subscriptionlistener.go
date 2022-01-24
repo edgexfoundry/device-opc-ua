@@ -61,10 +61,12 @@ func (d *Driver) startSubscriptionListener() error {
 	}
 	defer client.Close()
 
+	notifyCh := make(chan *opcua.PublishNotificationData)
+
 	sub, err := client.Subscribe(
 		&opcua.SubscriptionParameters{
 			Interval: time.Duration(500) * time.Millisecond,
-		}, make(chan *opcua.PublishNotificationData))
+		}, notifyCh)
 	if err != nil {
 		return err
 	}
@@ -80,8 +82,8 @@ func (d *Driver) startSubscriptionListener() error {
 		// context return
 		case <-ctx.Done():
 			return nil
-			// receive Publish Notification Data
-		case res := <-sub.Notifs:
+		// receive Publish Notification Data
+		case res := <-notifyCh:
 			if res.Error != nil {
 				d.Logger.Debug(res.Error.Error())
 				continue
