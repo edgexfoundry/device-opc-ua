@@ -6,10 +6,11 @@
       "type": "go",
       "request": "launch",
       "mode": "debug",
-      "port": 2345,
-      "host": "127.0.0.1",
-      "program": "${fileDirname}",
-      "showLog": true
+      "program": "${workspaceFolder}/cmd",
+      "showLog": true,
+      "env": {
+        "EDGEX_SECURITY_SECRET_STORE": "false"
+      }
     }
   ]
 }
