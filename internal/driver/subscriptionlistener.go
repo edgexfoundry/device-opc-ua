@@ -14,7 +14,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/edgexfoundry/device-opcua-go/internal/config"
 	sdkModels "github.com/edgexfoundry/device-sdk-go/v2/pkg/models"
 	"github.com/edgexfoundry/device-sdk-go/v2/pkg/service"
 	"github.com/edgexfoundry/go-mod-core-contracts/v2/models"
@@ -98,38 +97,13 @@ func (d *Driver) startSubscriptionListener() error {
 }
 
 func (d *Driver) getClient(device models.Device) (*opcua.Client, error) {
-	var (
-		policy   = d.serviceConfig.OPCUAServer.Policy
-		mode     = d.serviceConfig.OPCUAServer.Mode
-		certFile = d.serviceConfig.OPCUAServer.CertFile
-		keyFile  = d.serviceConfig.OPCUAServer.KeyFile
-	)
-
-	endpoint, xerr := config.FetchEndpoint(device.Protocols)
-	if xerr != nil {
-		return nil, xerr
-	}
-
-	endpoints, err := opcua.GetEndpoints(endpoint)
+	opts, err := d.createClientOptions()
 	if err != nil {
+		d.Logger.Warnf("Driver.getClient: Failed to create OPCUA client options, %s", err)
 		return nil, err
 	}
-	ep := opcua.SelectEndpoint(endpoints, policy, ua.MessageSecurityModeFromString(mode))
-	if ep == nil {
-		return nil, fmt.Errorf("[Incoming listener] Failed to find suitable endpoint")
-	}
-	ep.EndpointURL = endpoint
 
-	opts := []opcua.Option{
-		opcua.SecurityPolicy(policy),
-		opcua.SecurityModeString(mode),
-		opcua.CertificateFile(certFile),
-		opcua.PrivateKeyFile(keyFile),
-		opcua.AuthAnonymous(),
-		opcua.SecurityFromEndpoint(ep, ua.UserTokenTypeAnonymous),
-	}
-
-	return opcua.NewClient(ep.EndpointURL, opts...), nil
+	return opcua.NewClient(d.serviceConfig.OPCUAServer.Endpoint, opts...), nil
 }
 
 func (d *Driver) configureMonitoredItems(sub *opcua.Subscription, resources, deviceName string) error {

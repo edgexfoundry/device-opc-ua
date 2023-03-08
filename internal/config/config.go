@@ -35,12 +35,18 @@ func (sw *ServiceConfig) UpdateFromRaw(rawConfig interface{}) bool {
 
 // OPCUAServerConfig server information defined by the device profile
 type OPCUAServerConfig struct {
-	DeviceName string
-	Policy     string
-	Mode       string
-	CertFile   string
-	KeyFile    string
-	Writable   WritableInfo
+	DeviceName            string
+	Policy                string
+	Mode                  string
+	CertFile              string
+	KeyFile               string
+	Endpoint              string
+	CredentialsPath       string
+	CredentialsRetryTime  int
+	CredentialsRetryWait  int
+	ConnEstablishingRetry int
+	ConnRetryWaitTime     int
+	Writable              WritableInfo
 }
 
 // WritableInfo configuration data that can be written without restarting the service

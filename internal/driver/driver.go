@@ -10,8 +10,12 @@ package driver
 
 import (
 	"context"
+	"crypto/rsa"
 	"fmt"
+	"github.com/gopcua/opcua"
+	"github.com/gopcua/opcua/ua"
 	"sync"
+	"time"
 
 	"github.com/edgexfoundry/device-opcua-go/internal/config"
 	sdkModel "github.com/edgexfoundry/device-sdk-go/v2/pkg/models"
@@ -23,6 +27,7 @@ import (
 
 var once sync.Once
 var driver *Driver
+var cert []byte
 
 // Driver struct
 type Driver struct {
@@ -71,6 +76,50 @@ func (d *Driver) Initialize(lc logger.LoggingClient, asyncCh chan<- *sdkModel.As
 	}
 
 	return nil
+}
+
+// creates the options to connect with a opcua Client based on the configured options.
+func (d *Driver) createClientOptions() ([]opcua.Option, error) {
+	availableServerEndpoints, err := opcua.GetEndpoints(d.serviceConfig.OPCUAServer.Endpoint)
+	if err != nil {
+		d.Logger.Error("OPC GetEndpoints: %w", err)
+		return nil, err
+	}
+	credentials, err := getCredentials(d.serviceConfig.OPCUAServer.CredentialsPath)
+	if err != nil {
+		d.Logger.Error("getCredentials: %w", err)
+		return nil, err
+	}
+
+	username := credentials.Username
+	password := credentials.Password
+	policy := ua.SecurityPolicyURIBasic256Sha256
+	mode := ua.MessageSecurityModeSignAndEncrypt
+
+	ep := opcua.SelectEndpoint(availableServerEndpoints, policy, mode)
+	c, err := generateCert() // This is where you generate the certificate
+	if err != nil {
+		d.Logger.Error("generateCert: %w", err)
+		return nil, err
+	}
+
+	pk, ok := c.PrivateKey.(*rsa.PrivateKey) // This is where you set the private key
+	if !ok {
+		d.Logger.Error("invalid private key")
+	}
+
+	cert = c.Certificate[0]
+
+	opts := []opcua.Option{
+		opcua.SecurityPolicy(policy),
+		opcua.SecurityMode(mode),
+		opcua.PrivateKey(pk),
+		opcua.Certificate(cert),                // Set the certificate for the OPC UA Client
+		opcua.AuthUsername(username, password), // Use this if you are using username and password
+		opcua.SecurityFromEndpoint(ep, ua.UserTokenTypeUserName),
+		opcua.SessionTimeout(30 * time.Minute),
+	}
+	return opts, nil
 }
 
 // Callback function provided to ListenForCustomConfigChanges to update
