@@ -154,9 +154,13 @@ func makeReadRequest(deviceClient *opcua.Client, req sdkModel.CommandRequest) (*
 		return nil, fmt.Errorf("Driver.handleReadCommands: Status not OK: %v", resp.Results[0].Status)
 	}
 
-	// make new result
-	reading := resp.Results[0].Value.Value()
-	return newResult(req, reading)
+	result, err := newResult(req, reading)
+
+	// get source timestamp
+	sourceTimeStamp := extractSourceTimestamp(resp.Results[0])
+	result.Tags["source timestamp"] = sourceTimeStamp.String()
+
+	return result, err
 }
 
 func makeMethodCall(deviceClient *opcua.Client, req sdkModel.CommandRequest) (*sdkModel.CommandValue, error) {
@@ -205,7 +209,12 @@ func makeMethodCall(deviceClient *opcua.Client, req sdkModel.CommandRequest) (*s
 		return nil, fmt.Errorf("Driver.handleReadCommands: Method status not OK: %v", resp.StatusCode)
 	}
 
-	return newResult(req, resp.OutputArguments[0].Value())
+	result, err := newResult(req, resp.OutputArguments[0].Value())
+	// get source timestamp
+	sourceTimeStamp := extractSourceTimestamp(resp.OutputArguments[0].DataValue())
+	result.Tags["source timestamp"] = sourceTimeStamp.String()
+
+	return result, err
 }
 
 func generateCert() (*tls.Certificate, error) {
