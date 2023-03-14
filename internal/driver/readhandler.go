@@ -154,8 +154,6 @@ func makeReadRequest(deviceClient *opcua.Client, req sdkModel.CommandRequest) (*
 		return nil, fmt.Errorf("Driver.handleReadCommands: Status not OK: %v", resp.Results[0].Status)
 	}
 
-	// make new result
-	reading := resp.Results[0].Value.Value()
 	result, err := newResult(req, reading)
 
 	// get source timestamp
