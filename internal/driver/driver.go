@@ -93,8 +93,8 @@ func (d *Driver) createClientOptions() ([]opcua.Option, error) {
 
 	username := credentials.Username
 	password := credentials.Password
-	policy := ua.SecurityPolicyURIBasic256Sha256
-	mode := ua.MessageSecurityModeSignAndEncrypt
+	policy := ua.FormatSecurityPolicyURI(d.serviceConfig.OPCUAServer.Policy)
+	mode := ua.MessageSecurityModeFromString(d.serviceConfig.OPCUAServer.Mode)
 
 	ep := opcua.SelectEndpoint(availableServerEndpoints, policy, mode)
 	c, err := generateCert() // This is where you generate the certificate
