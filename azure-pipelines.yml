@@ -1,0 +1,42 @@
+name: $(majorMinorPatchVersion).$(semanticVersion)
+
+trigger:
+- develop
+
+resources:
+- repo: self
+
+variables:
+- name : tag 
+  value: '$(Build.BuildNumber)'  
+- name: majorMinorPatchVersion
+  value: 0.1
+- name: semanticVersion 
+  value: $[counter(variables['majorMinorPatchVersion'], 0)]
+- name: DOCKER_REPOSITORY_NAME
+  value: 'baader/device-opcua-go'
+- name: SERVICE_CONNECTION
+  value: 'bOne-platform-azure-container-registry'
+
+stages:
+- stage: Build
+  displayName: Build image
+  jobs:
+  - job: Build
+    displayName: Build
+    pool:
+      vmImage: ubuntu-latest
+    steps:
+    # Docker image build to acr
+    - task: Docker@2
+      displayName: 'Build and push image to acr'
+      inputs:
+        command: 'buildAndPush'
+        repository: $(DOCKER_REPOSITORY_NAME)
+        Dockerfile: '$(Build.SourcesDirectory)/Dockerfile'
+        containerRegistry: $(SERVICE_CONNECTION)
+        tags: |
+          $(tag)
+          alpha
+          $(majorMinorPatchVersion)
+          
