@@ -8,6 +8,8 @@ package driver
 
 import (
 	"context"
+	"github.com/gopcua/opcua/ua"
+	"github.com/pkg/errors"
 	"testing"
 
 	"github.com/edgexfoundry/device-opcua-go/internal/config"
@@ -129,7 +131,73 @@ func TestDriver_RemoveDevice(t *testing.T) {
 		})
 	}
 }
-
+func TestDriver_CreateClientOptions(t *testing.T) {
+	tests := []struct {
+		name                 string
+		getter               func(endpoint string) ([]*ua.EndpointDescription, error)
+		expectedResultLength int
+		wantErr              bool
+	}{
+		{
+			name: "OK - options created successfully",
+			getter: func(endpoint string) ([]*ua.EndpointDescription, error) {
+				var endpoints []*ua.EndpointDescription
+				ep := &ua.EndpointDescription{
+					EndpointURL:         "",
+					Server:              nil,
+					ServerCertificate:   nil,
+					SecurityMode:        0,
+					SecurityPolicyURI:   "",
+					UserIdentityTokens:  nil,
+					TransportProfileURI: "",
+					SecurityLevel:       0,
+				}
+				endpoints = append(endpoints, ep)
+				return endpoints, nil
+			},
+			expectedResultLength: 7,
+			wantErr:              false,
+		},
+		{
+			name: "NOK - options not created when endpoints cannot be fetched",
+			getter: func(endpoint string) ([]*ua.EndpointDescription, error) {
+				return nil, errors.New("random endpoint error")
+			},
+			expectedResultLength: 0,
+			wantErr:              true,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			d := &Driver{
+				Logger: &logger.MockLogger{},
+			}
+			d.serviceConfig = &config.ServiceConfig{OPCUAServer: config.OPCUAServerConfig{Endpoint: "127.0.0.1"}}
+			GetEndpoints = tt.getter
+			SelectEndPoint = func(endpoints []*ua.EndpointDescription, policy string, mode ua.MessageSecurityMode) *ua.EndpointDescription {
+				description := &ua.EndpointDescription{
+					EndpointURL:         "",
+					Server:              nil,
+					ServerCertificate:   nil,
+					SecurityMode:        0,
+					SecurityPolicyURI:   "",
+					UserIdentityTokens:  nil,
+					TransportProfileURI: "",
+					SecurityLevel:       0,
+				}
+				return description
+			}
+			opts, err := d.createClientOptions()
+			if (err != nil) != tt.wantErr {
+				t.Errorf("Driver.CreateClientOptions()  = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if len(opts) != tt.expectedResultLength {
+				t.Errorf("Driver.CreateClientOptions() = %v, want array len %v", len(opts), tt.expectedResultLength)
+			}
+		})
+	}
+}
 func TestDriver_Stop(t *testing.T) {
 	type args struct {
 		force bool

@@ -9,20 +9,30 @@
 package driver
 
 import (
+	"bytes"
 	"context"
+	"crypto/rand"
 	"crypto/rsa"
+	"crypto/tls"
+	"crypto/x509"
+	"crypto/x509/pkix"
+	"encoding/pem"
 	"fmt"
-	"github.com/gopcua/opcua"
-	"github.com/gopcua/opcua/ua"
-	"sync"
-	"time"
-
 	"github.com/edgexfoundry/device-opcua-go/internal/config"
 	sdkModel "github.com/edgexfoundry/device-sdk-go/v2/pkg/models"
 	"github.com/edgexfoundry/device-sdk-go/v2/pkg/service"
+	"github.com/edgexfoundry/go-mod-bootstrap/v2/bootstrap/secret"
+	"github.com/edgexfoundry/go-mod-bootstrap/v2/bootstrap/startup"
 	"github.com/edgexfoundry/go-mod-core-contracts/v2/clients/logger"
 	"github.com/edgexfoundry/go-mod-core-contracts/v2/errors"
 	"github.com/edgexfoundry/go-mod-core-contracts/v2/models"
+	"github.com/gopcua/opcua"
+	"github.com/gopcua/opcua/ua"
+	"math/big"
+	"net"
+	"net/url"
+	"sync"
+	"time"
 )
 
 var once sync.Once
@@ -78,14 +88,22 @@ func (d *Driver) Initialize(lc logger.LoggingClient, asyncCh chan<- *sdkModel.As
 	return nil
 }
 
+var (
+	GetEndpoints = opcua.GetEndpoints
+)
+
+var (
+	SelectEndPoint = opcua.SelectEndpoint
+)
+
 // creates the options to connect with a opcua Client based on the configured options.
 func (d *Driver) createClientOptions() ([]opcua.Option, error) {
-	availableServerEndpoints, err := opcua.GetEndpoints(d.serviceConfig.OPCUAServer.Endpoint)
+	availableServerEndpoints, err := GetEndpoints(d.serviceConfig.OPCUAServer.Endpoint)
 	if err != nil {
 		d.Logger.Error("OPC GetEndpoints: %w", err)
 		return nil, err
 	}
-	credentials, err := getCredentials(d.serviceConfig.OPCUAServer.CredentialsPath)
+	credentials, err := d.getCredentials(d.serviceConfig.OPCUAServer.CredentialsPath)
 	if err != nil {
 		d.Logger.Error("getCredentials: %w", err)
 		return nil, err
@@ -96,7 +114,7 @@ func (d *Driver) createClientOptions() ([]opcua.Option, error) {
 	policy := ua.FormatSecurityPolicyURI(d.serviceConfig.OPCUAServer.Policy)
 	mode := ua.MessageSecurityModeFromString(d.serviceConfig.OPCUAServer.Mode)
 
-	ep := opcua.SelectEndpoint(availableServerEndpoints, policy, mode)
+	ep := SelectEndPoint(availableServerEndpoints, policy, mode)
 	c, err := generateCert() // This is where you generate the certificate
 	if err != nil {
 		d.Logger.Error("generateCert: %w", err)
@@ -120,6 +138,95 @@ func (d *Driver) createClientOptions() ([]opcua.Option, error) {
 		opcua.SessionTimeout(30 * time.Minute),
 	}
 	return opts, nil
+}
+
+// Gets the username and password credentials from the configuration.
+func (d *Driver) getCredentials(secretPath string) (config.Credentials, error) {
+	credentials := config.Credentials{}
+	timer := startup.NewTimer(d.serviceConfig.OPCUAServer.CredentialsRetryTime, d.serviceConfig.OPCUAServer.CredentialsRetryWait)
+	service := service.RunningService()
+	var secretData map[string]string
+	var err error
+	for timer.HasNotElapsed() {
+		secretData, err = service.SecretProvider.GetSecret(secretPath, secret.UsernameKey, secret.PasswordKey)
+		if err == nil {
+			break
+		}
+
+		d.Logger.Warnf(
+			"Unable to retrieve OPCUA credentials from SecretProvider at path '%s': %s. Retrying for %s",
+			secretPath,
+			err.Error(),
+			timer.RemainingAsString())
+		timer.SleepForInterval()
+	}
+
+	if err != nil {
+		return credentials, err
+	}
+
+	credentials.Username = secretData[secret.UsernameKey]
+	credentials.Password = secretData[secret.PasswordKey]
+
+	return credentials, nil
+}
+
+func generateCert() (*tls.Certificate, error) {
+
+	priv, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate private key: %s", err)
+	}
+
+	notBefore := time.Now()
+	notAfter := notBefore.Add(365 * 24 * time.Hour) // 1 year
+
+	serialNumberLimit := new(big.Int).Lsh(big.NewInt(1), 128)
+	serialNumber, err := rand.Int(rand.Reader, serialNumberLimit)
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate serial number: %s", err)
+	}
+
+	template := x509.Certificate{
+		SerialNumber: serialNumber,
+		Subject: pkix.Name{
+			Organization: []string{"Test Client"},
+		},
+		NotBefore: notBefore,
+		NotAfter:  notAfter,
+
+		KeyUsage:              x509.KeyUsageContentCommitment | x509.KeyUsageKeyEncipherment | x509.KeyUsageDigitalSignature | x509.KeyUsageDataEncipherment | x509.KeyUsageCertSign,
+		ExtKeyUsage:           []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth, x509.ExtKeyUsageClientAuth},
+		BasicConstraintsValid: true,
+	}
+
+	host := "urn:testing:client"
+	if ip := net.ParseIP(host); ip != nil {
+		template.IPAddresses = append(template.IPAddresses, ip)
+	} else {
+		template.DNSNames = append(template.DNSNames, host)
+	}
+	if uri, err := url.Parse(host); err == nil {
+		template.URIs = append(template.URIs, uri)
+	}
+
+	derBytes, err := x509.CreateCertificate(rand.Reader, &template, &template, publicKeys(priv), priv)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create certificate: %s", err)
+	}
+
+	certBuf := bytes.NewBuffer(nil)
+	if err := pem.Encode(certBuf, &pem.Block{Type: "CERTIFICATE", Bytes: derBytes}); err != nil {
+		return nil, fmt.Errorf("failed to encode certificate: %s", err)
+	}
+
+	keyBuf := bytes.NewBuffer(nil)
+	if err := pem.Encode(keyBuf, pemBlockForKeys(priv)); err != nil {
+		return nil, fmt.Errorf("failed to encode key: %s", err)
+	}
+
+	cert, err := tls.X509KeyPair(certBuf.Bytes(), keyBuf.Bytes())
+	return &cert, err
 }
 
 // Callback function provided to ListenForCustomConfigChanges to update

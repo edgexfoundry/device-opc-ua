@@ -7,6 +7,7 @@
 package driver
 
 import (
+	"github.com/edgexfoundry/go-mod-core-contracts/v2/clients/logger"
 	"testing"
 
 	"github.com/edgexfoundry/device-opcua-go/internal/config"
@@ -36,7 +37,7 @@ func Test_onIncomingDataListener(t *testing.T) {
 		d.serviceConfig = &config.ServiceConfig{}
 		d.serviceConfig.OPCUAServer.DeviceName = "Test"
 
-		err := d.onIncomingDataReceived("42", "TestResource")
+		err := d.onIncomingDataReceived("42", "TestResource", nil)
 		if err == nil {
 			t.Error("expected err to exist in test environment")
 		}
@@ -73,6 +74,7 @@ func TestDriver_getClient(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			d := NewProtocolDriver().(*Driver)
+			d.Logger = logger.MockLogger{}
 			d.serviceConfig = &config.ServiceConfig{}
 			_, err := d.getClient(tt.device)
 			if (err != nil) != tt.wantErr {

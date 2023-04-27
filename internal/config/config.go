@@ -61,6 +61,11 @@ var policies map[string]int = map[string]int{
 	"Basic256Sha256": 4,
 }
 
+type Credentials struct {
+	Username string
+	Password string
+}
+
 var modes map[string]int = map[string]int{
 	"None":           1,
 	"Sign":           2,

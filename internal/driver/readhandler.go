@@ -9,34 +9,17 @@
 package driver
 
 import (
-	"bytes"
 	"context"
 	"crypto/ecdsa"
-	"crypto/rand"
 	"crypto/rsa"
-	"crypto/tls"
 	"crypto/x509"
-	"crypto/x509/pkix"
 	"encoding/pem"
 	"fmt"
 	sdkModel "github.com/edgexfoundry/device-sdk-go/v2/pkg/models"
-	"github.com/edgexfoundry/device-sdk-go/v2/pkg/service"
-	"github.com/edgexfoundry/go-mod-bootstrap/v2/bootstrap/secret"
-	"github.com/edgexfoundry/go-mod-bootstrap/v2/bootstrap/startup"
-	"github.com/edgexfoundry/go-mod-bootstrap/v2/config"
 	"github.com/edgexfoundry/go-mod-core-contracts/v2/models"
 	"github.com/gopcua/opcua"
 	"github.com/gopcua/opcua/ua"
-	"math/big"
-	"net"
-	"net/url"
 	"os"
-	"time"
-)
-
-var (
-	certfile = ""
-	keyfile  = ""
 )
 
 // HandleReadCommands triggers a protocol Read operation for the specified device.
@@ -60,39 +43,6 @@ func (d *Driver) HandleReadCommands(deviceName string, protocols map[string]mode
 	defer client.Close()
 
 	return d.processReadCommands(client, reqs)
-}
-
-// Gets the username and password credentials from the configuration.
-func getCredentials(secretPath string) (config.Credentials, error) {
-	credentials := config.Credentials{}
-	deviceService := service.RunningService()
-
-	timer := startup.NewTimer(driver.serviceConfig.OPCUAServer.CredentialsRetryTime, driver.serviceConfig.OPCUAServer.CredentialsRetryWait)
-
-	var secretData map[string]string
-	var err error
-	for timer.HasNotElapsed() {
-		secretData, err = deviceService.SecretProvider.GetSecret(secretPath, secret.UsernameKey, secret.PasswordKey)
-		if err == nil {
-			break
-		}
-
-		driver.Logger.Warnf(
-			"Unable to retrieve OPCUA credentials from SecretProvider at path '%s': %s. Retrying for %s",
-			secretPath,
-			err.Error(),
-			timer.RemainingAsString())
-		timer.SleepForInterval()
-	}
-
-	if err != nil {
-		return credentials, err
-	}
-
-	credentials.Username = secretData[secret.UsernameKey]
-	credentials.Password = secretData[secret.PasswordKey]
-
-	return credentials, nil
 }
 
 func (d *Driver) processReadCommands(client *opcua.Client, reqs []sdkModel.CommandRequest) ([]*sdkModel.CommandValue, error) {
@@ -217,64 +167,6 @@ func makeMethodCall(deviceClient *opcua.Client, req sdkModel.CommandRequest) (*s
 	result.Tags["source timestamp"] = sourceTimeStamp.String()
 
 	return result, err
-}
-
-func generateCert() (*tls.Certificate, error) {
-
-	priv, err := rsa.GenerateKey(rand.Reader, 2048)
-	if err != nil {
-		return nil, fmt.Errorf("failed to generate private key: %s", err)
-	}
-
-	notBefore := time.Now()
-	notAfter := notBefore.Add(365 * 24 * time.Hour) // 1 year
-
-	serialNumberLimit := new(big.Int).Lsh(big.NewInt(1), 128)
-	serialNumber, err := rand.Int(rand.Reader, serialNumberLimit)
-	if err != nil {
-		return nil, fmt.Errorf("failed to generate serial number: %s", err)
-	}
-
-	template := x509.Certificate{
-		SerialNumber: serialNumber,
-		Subject: pkix.Name{
-			Organization: []string{"Test Client"},
-		},
-		NotBefore: notBefore,
-		NotAfter:  notAfter,
-
-		KeyUsage:              x509.KeyUsageContentCommitment | x509.KeyUsageKeyEncipherment | x509.KeyUsageDigitalSignature | x509.KeyUsageDataEncipherment | x509.KeyUsageCertSign,
-		ExtKeyUsage:           []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth, x509.ExtKeyUsageClientAuth},
-		BasicConstraintsValid: true,
-	}
-
-	host := "urn:testing:client"
-	if ip := net.ParseIP(host); ip != nil {
-		template.IPAddresses = append(template.IPAddresses, ip)
-	} else {
-		template.DNSNames = append(template.DNSNames, host)
-	}
-	if uri, err := url.Parse(host); err == nil {
-		template.URIs = append(template.URIs, uri)
-	}
-
-	derBytes, err := x509.CreateCertificate(rand.Reader, &template, &template, publicKeys(priv), priv)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create certificate: %s", err)
-	}
-
-	certBuf := bytes.NewBuffer(nil)
-	if err := pem.Encode(certBuf, &pem.Block{Type: "CERTIFICATE", Bytes: derBytes}); err != nil {
-		return nil, fmt.Errorf("failed to encode certificate: %s", err)
-	}
-
-	keyBuf := bytes.NewBuffer(nil)
-	if err := pem.Encode(keyBuf, pemBlockForKeys(priv)); err != nil {
-		return nil, fmt.Errorf("failed to encode key: %s", err)
-	}
-
-	cert, err := tls.X509KeyPair(certBuf.Bytes(), keyBuf.Bytes())
-	return &cert, err
 }
 
 func publicKeys(priv interface{}) interface{} {

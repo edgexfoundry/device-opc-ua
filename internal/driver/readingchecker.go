@@ -115,7 +115,6 @@ func extractSourceTimestamp(value *ua.DataValue) time.Time {
 			tm = value.ServerTimestamp
 		}
 	}
-
 	return tm
 }
 
