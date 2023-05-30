@@ -9,7 +9,6 @@
 package driver
 
 import (
-	"bytes"
 	"context"
 	"crypto/rand"
 	"crypto/rsa"
@@ -28,16 +27,16 @@ import (
 	"github.com/edgexfoundry/go-mod-core-contracts/v2/models"
 	"github.com/gopcua/opcua"
 	"github.com/gopcua/opcua/ua"
+	"log"
 	"math/big"
-	"net"
-	"net/url"
+	"os"
+	"strconv"
 	"sync"
 	"time"
 )
 
 var once sync.Once
 var driver *Driver
-var cert []byte
 
 // Driver struct
 type Driver struct {
@@ -56,6 +55,21 @@ func NewProtocolDriver() sdkModel.ProtocolDriver {
 	})
 	return driver
 }
+func createX509Template() x509.Certificate {
+	template := x509.Certificate{
+		SerialNumber: big.NewInt(2023),
+		Subject: pkix.Name{
+			Organization: []string{driver.serviceConfig.OPCUAServer.CertificateConfig.CertOrganization},
+			Country:      []string{driver.serviceConfig.OPCUAServer.CertificateConfig.CertCountry},
+			Province:     []string{driver.serviceConfig.OPCUAServer.CertificateConfig.CertProvince},
+			Locality:     []string{driver.serviceConfig.OPCUAServer.CertificateConfig.CertLocality},
+		},
+		NotBefore:             time.Now(),
+		NotAfter:              time.Now().AddDate(10, 0, 0),
+		BasicConstraintsValid: true,
+	}
+	return template
+}
 
 // Initialize performs protocol-specific initialization for the device service
 func (d *Driver) Initialize(lc logger.LoggingClient, asyncCh chan<- *sdkModel.AsyncValues, deviceCh chan<- []sdkModel.DiscoveredDevice) error {
@@ -65,7 +79,6 @@ func (d *Driver) Initialize(lc logger.LoggingClient, asyncCh chan<- *sdkModel.As
 	d.mu.Lock()
 	d.resourceMap = make(map[uint32]string)
 	d.mu.Unlock()
-
 	ds := service.RunningService()
 	if ds == nil {
 		return errors.NewCommonEdgeXWrapper(fmt.Errorf("unable to get running device service"))
@@ -81,20 +94,104 @@ func (d *Driver) Initialize(lc logger.LoggingClient, asyncCh chan<- *sdkModel.As
 		return errors.NewCommonEdgeXWrapper(err)
 	}
 
-	if err := ds.ListenForCustomConfigChanges(&d.serviceConfig.OPCUAServer.Writable, WritableInfoSectionName, d.updateWritableConfig); err != nil {
-		return errors.NewCommonEdgeX(errors.Kind(err), fmt.Sprintf("unable to listen for changes for '%s' custom configuration", WritableInfoSectionName), err)
+	// Add listener for username and password changes in insecure secrets config section
+	if err := ds.ListenForCustomConfigChanges(&d.serviceConfig.OPCUAServer.Writable, InsecureSecretsConfigSectionName, d.updateWritableConfig); err != nil {
+		return errors.NewCommonEdgeX(errors.Kind(err), fmt.Sprintf("unable to listen for changes for '%s' custom configuration", InsecureSecretsConfigSectionName), err)
 	}
-
+	// Add listener for changes in opcua custom config section
+	if err := ds.ListenForCustomConfigChanges(&d.serviceConfig.OPCUAServer.Writable, CustomConfigSectionName, d.updateWritableConfig); err != nil {
+		return errors.NewCommonEdgeX(errors.Kind(err), fmt.Sprintf("unable to listen for changes for '%s' custom configuration", CustomConfigSectionName), err)
+	}
 	return nil
 }
 
+// GetEndpoints capsules the containing method for easy mocking in unit tests
 var (
 	GetEndpoints = opcua.GetEndpoints
 )
 
+// SelectEndPoint capsules the containing method for easy mocking in unit tests
 var (
 	SelectEndPoint = opcua.SelectEndpoint
 )
+
+// ReadCertAndKey capsules the containing method for easy mocking in unit tests
+var (
+	ReadCertAndKey = ReadClientCertAndPrivateKey
+)
+
+// CertKeyPair capsules the containing method for easy mocking in unit tests
+var (
+	CertKeyPair = tls.X509KeyPair
+)
+
+func ReadClientCertAndPrivateKey(clientCertFileName, clientKeyFileName string) ([]byte, []byte, error) {
+	clientCertificate, err := os.ReadFile(clientCertFileName)
+	var privateKey []byte = nil
+
+	if err != nil {
+		log.Println("Client certificate not existing, creating new one")
+
+		clientCert, clientKey, err := CreateSelfSignedClientCertificates("localhost")
+		if err != nil {
+			return nil, nil, err
+		}
+
+		var perm int
+		perm, err = strconv.Atoi(driver.serviceConfig.OPCUAServer.CertificateConfig.CertFilePermissions)
+		if err != nil {
+			log.Println("Could not convert permission string to uint:", err)
+			return nil, nil, err
+		}
+
+		err = os.WriteFile(clientCertFileName, clientCert, os.FileMode(perm))
+		if err != nil {
+			return nil, nil, err
+		}
+		err = os.WriteFile(clientKeyFileName, clientKey, os.FileMode(perm))
+		if err != nil {
+			return nil, nil, err
+		}
+
+		clientCertificate = clientCert
+		privateKey = clientKey
+	} else {
+		privateKey, err = os.ReadFile(clientKeyFileName)
+		if err != nil {
+			return nil, nil, err
+		}
+	}
+	println("Successfully load certificates from file")
+	return clientCertificate, privateKey, nil
+}
+func CreateSelfSignedClientCertificates(clientName string) ([]byte, []byte, error) {
+	template := createX509Template()
+	clientPrivateKey, err := rsa.GenerateKey(rand.Reader, driver.serviceConfig.OPCUAServer.CertificateConfig.CertBits)
+	if err != nil {
+		log.Fatal(err)
+	}
+	clientPrivateKeyBytes := x509.MarshalPKCS1PrivateKey(clientPrivateKey)
+	clientPrivateKeyPEM := pem.EncodeToMemory(&pem.Block{Type: "RSA PRIVATE KEY", Bytes: clientPrivateKeyBytes})
+
+	clientTemplate := setClientTemplateOptions(template, clientName)
+
+	serverBytes, err := x509.CreateCertificate(rand.Reader, &clientTemplate, &clientTemplate, &clientPrivateKey.PublicKey, clientPrivateKey)
+	if err != nil {
+		return nil, nil, err
+	}
+	clientPem := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: serverBytes})
+	return clientPem, clientPrivateKeyPEM, nil
+}
+
+// setClientTemplateOptions Prepare template for generating client certificate
+func setClientTemplateOptions(template x509.Certificate, commonName string) x509.Certificate {
+	template.Subject.CommonName = commonName
+	template.IsCA = false
+	template.KeyUsage = x509.KeyUsageKeyEncipherment | x509.KeyUsageDigitalSignature
+	template.ExtKeyUsage = []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth}
+
+	return template
+}
 
 // creates the options to connect with a opcua Client based on the configured options.
 func (d *Driver) createClientOptions() ([]opcua.Option, error) {
@@ -111,31 +208,42 @@ func (d *Driver) createClientOptions() ([]opcua.Option, error) {
 
 	username := credentials.Username
 	password := credentials.Password
+
 	policy := ua.FormatSecurityPolicyURI(d.serviceConfig.OPCUAServer.Policy)
 	mode := ua.MessageSecurityModeFromString(d.serviceConfig.OPCUAServer.Mode)
 
+	var opts []opcua.Option
+
 	ep := SelectEndPoint(availableServerEndpoints, policy, mode)
-	c, err := generateCert() // This is where you generate the certificate
-	if err != nil {
-		d.Logger.Error("generateCert: %w", err)
-		return nil, err
-	}
 
-	pk, ok := c.PrivateKey.(*rsa.PrivateKey) // This is where you set the private key
-	if !ok {
-		d.Logger.Error("invalid private key")
-	}
+	// no need to set options if no security policy is set
+	if mode != ua.MessageSecurityModeNone {
+		clientCertFileName := d.serviceConfig.OPCUAServer.CertificateConfig.CertFile
+		clientKeyFileName := d.serviceConfig.OPCUAServer.CertificateConfig.KeyFile
 
-	cert = c.Certificate[0]
+		cert, key, err := ReadCertAndKey(clientCertFileName, clientKeyFileName)
 
-	opts := []opcua.Option{
-		opcua.SecurityPolicy(policy),
-		opcua.SecurityMode(mode),
-		opcua.PrivateKey(pk),
-		opcua.Certificate(cert),                // Set the certificate for the OPC UA Client
-		opcua.AuthUsername(username, password), // Use this if you are using username and password
-		opcua.SecurityFromEndpoint(ep, ua.UserTokenTypeUserName),
-		opcua.SessionTimeout(30 * time.Minute),
+		if err != nil {
+			return nil, err
+		}
+		clientCertificate, err := CertKeyPair(cert, key)
+
+		pk, ok := clientCertificate.PrivateKey.(*rsa.PrivateKey) // This is where you set the private key
+		if !ok {
+			d.Logger.Error("invalid private key")
+		}
+
+		cert = clientCertificate.Certificate[0]
+
+		opts = []opcua.Option{
+			opcua.SecurityPolicy(policy),
+			opcua.SecurityMode(mode),
+			opcua.PrivateKey(pk),
+			opcua.Certificate(cert),                // Set the certificate for the OPC UA Client
+			opcua.AuthUsername(username, password), // Use this if you are using username and password
+			opcua.SecurityFromEndpoint(ep, ua.UserTokenTypeUserName),
+			opcua.SessionTimeout(30 * time.Minute),
+		}
 	}
 	return opts, nil
 }
@@ -144,11 +252,11 @@ func (d *Driver) createClientOptions() ([]opcua.Option, error) {
 func (d *Driver) getCredentials(secretPath string) (config.Credentials, error) {
 	credentials := config.Credentials{}
 	timer := startup.NewTimer(d.serviceConfig.OPCUAServer.CredentialsRetryTime, d.serviceConfig.OPCUAServer.CredentialsRetryWait)
-	service := service.RunningService()
+	runningService := service.RunningService()
 	var secretData map[string]string
 	var err error
 	for timer.HasNotElapsed() {
-		secretData, err = service.SecretProvider.GetSecret(secretPath, secret.UsernameKey, secret.PasswordKey)
+		secretData, err = runningService.SecretProvider.GetSecret(secretPath, secret.UsernameKey, secret.PasswordKey)
 		if err == nil {
 			break
 		}
@@ -171,66 +279,8 @@ func (d *Driver) getCredentials(secretPath string) (config.Credentials, error) {
 	return credentials, nil
 }
 
-func generateCert() (*tls.Certificate, error) {
-
-	priv, err := rsa.GenerateKey(rand.Reader, 2048)
-	if err != nil {
-		return nil, fmt.Errorf("failed to generate private key: %s", err)
-	}
-
-	notBefore := time.Now()
-	notAfter := notBefore.Add(365 * 24 * time.Hour) // 1 year
-
-	serialNumberLimit := new(big.Int).Lsh(big.NewInt(1), 128)
-	serialNumber, err := rand.Int(rand.Reader, serialNumberLimit)
-	if err != nil {
-		return nil, fmt.Errorf("failed to generate serial number: %s", err)
-	}
-
-	template := x509.Certificate{
-		SerialNumber: serialNumber,
-		Subject: pkix.Name{
-			Organization: []string{"Test Client"},
-		},
-		NotBefore: notBefore,
-		NotAfter:  notAfter,
-
-		KeyUsage:              x509.KeyUsageContentCommitment | x509.KeyUsageKeyEncipherment | x509.KeyUsageDigitalSignature | x509.KeyUsageDataEncipherment | x509.KeyUsageCertSign,
-		ExtKeyUsage:           []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth, x509.ExtKeyUsageClientAuth},
-		BasicConstraintsValid: true,
-	}
-
-	host := "urn:testing:client"
-	if ip := net.ParseIP(host); ip != nil {
-		template.IPAddresses = append(template.IPAddresses, ip)
-	} else {
-		template.DNSNames = append(template.DNSNames, host)
-	}
-	if uri, err := url.Parse(host); err == nil {
-		template.URIs = append(template.URIs, uri)
-	}
-
-	derBytes, err := x509.CreateCertificate(rand.Reader, &template, &template, publicKeys(priv), priv)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create certificate: %s", err)
-	}
-
-	certBuf := bytes.NewBuffer(nil)
-	if err := pem.Encode(certBuf, &pem.Block{Type: "CERTIFICATE", Bytes: derBytes}); err != nil {
-		return nil, fmt.Errorf("failed to encode certificate: %s", err)
-	}
-
-	keyBuf := bytes.NewBuffer(nil)
-	if err := pem.Encode(keyBuf, pemBlockForKeys(priv)); err != nil {
-		return nil, fmt.Errorf("failed to encode key: %s", err)
-	}
-
-	cert, err := tls.X509KeyPair(certBuf.Bytes(), keyBuf.Bytes())
-	return &cert, err
-}
-
 // Callback function provided to ListenForCustomConfigChanges to update
-// the configuration when OPCUAServer.Writable changes
+// the configuration a config section changes, for example via consul
 func (d *Driver) updateWritableConfig(rawWritableConfig interface{}) {
 	updated, ok := rawWritableConfig.(*config.WritableInfo)
 	if !ok {
@@ -241,7 +291,6 @@ func (d *Driver) updateWritableConfig(rawWritableConfig interface{}) {
 	d.cleanup()
 
 	d.serviceConfig.OPCUAServer.Writable = *updated
-
 	go d.startSubscriber()
 }
 

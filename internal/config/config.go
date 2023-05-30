@@ -10,7 +10,6 @@ package config
 
 import (
 	"fmt"
-
 	"github.com/edgexfoundry/go-mod-core-contracts/v2/errors"
 	"github.com/edgexfoundry/go-mod-core-contracts/v2/models"
 )
@@ -38,15 +37,26 @@ type OPCUAServerConfig struct {
 	DeviceName            string
 	Policy                string
 	Mode                  string
-	CertFile              string
-	KeyFile               string
 	Endpoint              string
 	CredentialsPath       string
+	CertificateConfig     CertificateConfiguration
 	CredentialsRetryTime  int
 	CredentialsRetryWait  int
 	ConnEstablishingRetry int
 	ConnRetryWaitTime     int
 	Writable              WritableInfo
+}
+
+// CertificateConfiguration config information regarding the certificate
+type CertificateConfiguration struct {
+	CertFile            string
+	CertOrganization    string
+	CertCountry         string
+	CertProvince        string
+	CertLocality        string
+	CertBits            int
+	CertFilePermissions string
+	KeyFile             string
 }
 
 // WritableInfo configuration data that can be written without restarting the service
@@ -85,10 +95,10 @@ func (info *OPCUAServerConfig) Validate() errors.EdgeX {
 		return errors.NewCommonEdgeX(errors.KindContractInvalid, "OPCUAServerInfo.Mode configuration setting mismatch", nil)
 	}
 	if info.Mode != "None" || info.Policy != "None" {
-		if info.CertFile == "" {
+		if info.CertificateConfig.CertFile == "" {
 			return errors.NewCommonEdgeX(errors.KindContractInvalid, "OPCUAServerInfo.CertFile configuration setting cannot be blank when a security mode or policy is set", nil)
 		}
-		if info.KeyFile == "" {
+		if info.CertificateConfig.KeyFile == "" {
 			return errors.NewCommonEdgeX(errors.KindContractInvalid, "OPCUAServerInfo.KeyFile configuration setting cannot be blank when a security mode or policy is set", nil)
 		}
 	}
