@@ -10,13 +10,16 @@ package driver
 
 import (
 	"context"
+	"crypto/ecdsa"
+	"crypto/rsa"
+	"crypto/x509"
+	"encoding/pem"
 	"fmt"
-
-	"github.com/edgexfoundry/device-opcua-go/internal/config"
 	sdkModel "github.com/edgexfoundry/device-sdk-go/v2/pkg/models"
 	"github.com/edgexfoundry/go-mod-core-contracts/v2/models"
 	"github.com/gopcua/opcua"
 	"github.com/gopcua/opcua/ua"
+	"os"
 )
 
 // HandleReadCommands triggers a protocol Read operation for the specified device.
@@ -25,16 +28,16 @@ func (d *Driver) HandleReadCommands(deviceName string, protocols map[string]mode
 
 	d.Logger.Debugf("Driver.HandleReadCommands: protocols: %v resource: %v attributes: %v", protocols, reqs[0].DeviceResourceName, reqs[0].Attributes)
 
-	// create device client and open connection
-	endpoint, err := config.FetchEndpoint(protocols)
+	opts, err := d.createClientOptions()
 	if err != nil {
+		d.Logger.Warnf("Driver.HandleReadCommands: Failed to create OPCUA client options, %s", err)
 		return nil, err
 	}
-	ctx := context.Background()
 
-	client := opcua.NewClient(endpoint, opcua.SecurityMode(ua.MessageSecurityModeNone))
+	ctx := context.Background()
+	client := opcua.NewClient(d.serviceConfig.OPCUAServer.Endpoint, opts...)
 	if err := client.Connect(ctx); err != nil {
-		d.Logger.Warnf("Driver.HandleReadCommands: Failed to connect OPCUA client, %s", err)
+		d.Logger.Error("Driver.HandleReadCommands: Failed to connect OPCUA client, %s", err)
 		return nil, err
 	}
 	defer client.Close()
@@ -103,7 +106,13 @@ func makeReadRequest(deviceClient *opcua.Client, req sdkModel.CommandRequest) (*
 
 	// make new result
 	reading := resp.Results[0].Value.Value()
-	return newResult(req, reading)
+	result, err := newResult(req, reading)
+
+	// get source timestamp
+	sourceTimeStamp := extractSourceTimestamp(resp.Results[0])
+	result.Tags["source timestamp"] = sourceTimeStamp.String()
+
+	return result, err
 }
 
 func makeMethodCall(deviceClient *opcua.Client, req sdkModel.CommandRequest) (*sdkModel.CommandValue, error) {
@@ -152,5 +161,37 @@ func makeMethodCall(deviceClient *opcua.Client, req sdkModel.CommandRequest) (*s
 		return nil, fmt.Errorf("Driver.handleReadCommands: Method status not OK: %v", resp.StatusCode)
 	}
 
-	return newResult(req, resp.OutputArguments[0].Value())
+	result, err := newResult(req, resp.OutputArguments[0].Value())
+	// get source timestamp
+	sourceTimeStamp := extractSourceTimestamp(resp.OutputArguments[0].DataValue())
+	result.Tags["source timestamp"] = sourceTimeStamp.String()
+
+	return result, err
+}
+
+func publicKeys(priv interface{}) interface{} {
+	switch k := priv.(type) {
+	case *rsa.PrivateKey:
+		return &k.PublicKey
+	case *ecdsa.PrivateKey:
+		return &k.PublicKey
+	default:
+		return nil
+	}
+}
+
+func pemBlockForKeys(priv interface{}) *pem.Block {
+	switch k := priv.(type) {
+	case *rsa.PrivateKey:
+		return &pem.Block{Type: "RSA PRIVATE KEY", Bytes: x509.MarshalPKCS1PrivateKey(k)}
+	case *ecdsa.PrivateKey:
+		b, err := x509.MarshalECPrivateKey(k)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Unable to marshal ECDSA private key: %v", err)
+			os.Exit(2)
+		}
+		return &pem.Block{Type: "EC PRIVATE KEY", Bytes: b}
+	default:
+		return nil
+	}
 }

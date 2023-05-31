@@ -8,12 +8,14 @@ package driver
 
 import (
 	"context"
-	"testing"
-
+	"crypto/tls"
 	"github.com/edgexfoundry/device-opcua-go/internal/config"
 	sdkModel "github.com/edgexfoundry/device-sdk-go/v2/pkg/models"
 	"github.com/edgexfoundry/go-mod-core-contracts/v2/clients/logger"
 	"github.com/edgexfoundry/go-mod-core-contracts/v2/models"
+	"github.com/gopcua/opcua/ua"
+	"github.com/pkg/errors"
+	"testing"
 )
 
 func TestDriver_updateWritableConfig(t *testing.T) {
@@ -101,21 +103,78 @@ func TestDriver_UpdateDevice(t *testing.T) {
 		})
 	}
 }
-
-func TestDriver_RemoveDevice(t *testing.T) {
-	type args struct {
-		deviceName string
-		protocols  map[string]models.ProtocolProperties
-	}
+func TestDriver_CreateClientOptions(t *testing.T) {
 	tests := []struct {
-		name    string
-		args    args
-		wantErr bool
+		name                 string
+		getter               func(endpoint string) ([]*ua.EndpointDescription, error)
+		certAndKeyReader     func(clientCertFileName, clientKeyFileName string) ([]byte, []byte, error)
+		certKeyPair          func(certPEMBlock []byte, keyPEMBlock []byte) (tls.Certificate, error)
+		serviceConfig        config.ServiceConfig
+		expectedResultLength int
+		wantErr              bool
 	}{
 		{
-			name:    "OK - device removal success",
-			args:    args{deviceName: "Test"},
-			wantErr: false,
+			name: "OK - options created successfully",
+			getter: func(endpoint string) ([]*ua.EndpointDescription, error) {
+				var endpoints []*ua.EndpointDescription
+				ep := &ua.EndpointDescription{
+					EndpointURL:         "",
+					Server:              nil,
+					ServerCertificate:   nil,
+					SecurityMode:        0,
+					SecurityPolicyURI:   "",
+					UserIdentityTokens:  nil,
+					TransportProfileURI: "",
+					SecurityLevel:       0,
+				}
+				endpoints = append(endpoints, ep)
+				return endpoints, nil
+			},
+			certAndKeyReader: func(clientCertFileName, clientKeyFileName string) ([]byte, []byte, error) {
+				var cert = []byte{}
+				var key = []byte{}
+				return cert, key, nil
+			},
+			certKeyPair: func(certPEMBlock []byte, keyPEMBlock []byte) (tls.Certificate, error) {
+				a := [][]byte{
+					{0, 1, 2, 3},
+					{4, 5, 6, 7},
+				}
+				var cert = tls.Certificate{Certificate: a, PrivateKey: nil}
+				return cert, nil
+			},
+			serviceConfig:        config.ServiceConfig{OPCUAServer: config.OPCUAServerConfig{Endpoint: "127.0.0.1", Policy: "Ba256Sha256", Mode: "SignAndEncrypt"}},
+			expectedResultLength: 7,
+			wantErr:              false,
+		},
+		{
+			name: "NOK - options not created when endpoints cannot be fetched",
+			getter: func(endpoint string) ([]*ua.EndpointDescription, error) {
+				return nil, errors.New("random endpoint error")
+			},
+			expectedResultLength: 0,
+			wantErr:              true,
+		},
+		{
+			name: "OK - options created correctly with no security policy",
+			getter: func(endpoint string) ([]*ua.EndpointDescription, error) {
+				var endpoints []*ua.EndpointDescription
+				ep := &ua.EndpointDescription{
+					EndpointURL:         "",
+					Server:              nil,
+					ServerCertificate:   nil,
+					SecurityMode:        0,
+					SecurityPolicyURI:   "",
+					UserIdentityTokens:  nil,
+					TransportProfileURI: "",
+					SecurityLevel:       0,
+				}
+				endpoints = append(endpoints, ep)
+				return endpoints, nil
+			},
+			serviceConfig:        config.ServiceConfig{OPCUAServer: config.OPCUAServerConfig{Endpoint: "127.0.0.1", Policy: "None", Mode: "None"}},
+			expectedResultLength: 0,
+			wantErr:              false,
 		},
 	}
 	for _, tt := range tests {
@@ -123,13 +182,34 @@ func TestDriver_RemoveDevice(t *testing.T) {
 			d := &Driver{
 				Logger: &logger.MockLogger{},
 			}
-			if err := d.RemoveDevice(tt.args.deviceName, tt.args.protocols); (err != nil) != tt.wantErr {
-				t.Errorf("Driver.RemoveDevice() error = %v, wantErr %v", err, tt.wantErr)
+			d.serviceConfig = &tt.serviceConfig
+			GetEndpoints = tt.getter
+			ReadCertAndKey = tt.certAndKeyReader
+			CertKeyPair = tt.certKeyPair
+			SelectEndPoint = func(endpoints []*ua.EndpointDescription, policy string, mode ua.MessageSecurityMode) *ua.EndpointDescription {
+				description := &ua.EndpointDescription{
+					EndpointURL:         "",
+					Server:              nil,
+					ServerCertificate:   nil,
+					SecurityMode:        0,
+					SecurityPolicyURI:   "",
+					UserIdentityTokens:  nil,
+					TransportProfileURI: "",
+					SecurityLevel:       0,
+				}
+				return description
+			}
+			opts, err := d.createClientOptions()
+			if (err != nil) != tt.wantErr {
+				t.Errorf("Driver.CreateClientOptions()  = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if len(opts) != tt.expectedResultLength {
+				t.Errorf("Driver.CreateClientOptions() = %v, want array len %v", len(opts), tt.expectedResultLength)
 			}
 		})
 	}
 }
-
 func TestDriver_Stop(t *testing.T) {
 	type args struct {
 		force bool

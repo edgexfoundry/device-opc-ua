@@ -8,11 +8,12 @@ package driver
 
 import (
 	"fmt"
-	"strings"
-	"testing"
-
 	"github.com/edgexfoundry/device-sdk-go/v2/pkg/models"
 	"github.com/edgexfoundry/go-mod-core-contracts/v2/common"
+	"github.com/gopcua/opcua/ua"
+	"strings"
+	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -20,6 +21,67 @@ import (
 
 // All TestNewResult* functions used from
 // https://github.com/edgexfoundry/device-mqtt-go/blob/2edd794ead44ee1cbb795ccb8ebf3dc377aa3945/internal/driver/driver_test.go
+
+func TestTimestamps(t *testing.T) {
+	tomorrow := time.Now().Add(time.Hour * 24)
+	yesterday := time.Now().Add(-time.Hour * 24)
+	tests := []struct {
+		name      string
+		dataValue ua.DataValue
+		want      time.Time
+		wantErr   bool
+	}{
+		{
+			name: "Expect SourceTimestamp to be used",
+			dataValue: ua.DataValue{
+				EncodingMask:      0,
+				Value:             nil,
+				Status:            0,
+				ServerTimestamp:   tomorrow,
+				SourceTimestamp:   yesterday,
+				SourcePicoseconds: 0,
+				ServerPicoseconds: 0,
+			},
+			want:    yesterday,
+			wantErr: true,
+		},
+		{
+			name: "Expect ServerTimestamp to be used",
+			dataValue: ua.DataValue{
+				EncodingMask:      0,
+				Value:             nil,
+				Status:            0,
+				ServerTimestamp:   tomorrow,
+				SourcePicoseconds: 0,
+				ServerPicoseconds: 0,
+			},
+			want:    tomorrow,
+			wantErr: true,
+		},
+		{
+			name: "Expect Edgex Timestamp to be used",
+			dataValue: ua.DataValue{
+				EncodingMask:      0,
+				Value:             nil,
+				Status:            0,
+				SourcePicoseconds: 0,
+				ServerPicoseconds: 0,
+			},
+			want:    time.Now(),
+			wantErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := extractSourceTimestamp(&tt.dataValue)
+			if result != tt.want {
+				t.Errorf("Readhandler.ExtractTimestamps = %v, want %v", result, tt.want)
+				return
+			}
+		})
+	}
+}
 
 func TestNewResult_bool(t *testing.T) {
 	var reading interface{} = true

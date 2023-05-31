@@ -1,0 +1,91 @@
+name: $(majorMinorVersion).$(patchVersion)$(extension)
+
+trigger:
+- develop
+- main
+
+resources:
+- repo: self
+
+variables:
+# tag section for docker 
+- name : exactVersionTag
+  value: '$(Build.BuildNumber)'
+- name : majorMinorTag
+  value: '$(majorMinorVersion)$(extension)'
+- name : latestTag
+  value: 'latest$(extension)'
+
+- name : extension
+  ${{ if eq(variables['Build.SourceBranchName'], 'main') }}:
+    value: ''
+  ${{ if eq(variables['Build.SourceBranchName'], 'develop') }}:
+    value: '-develop'
+  ${{ else }}:
+    value: '-wip'
+- name: majorMinorVersion
+  value: 0.1
+- name: patchVersion 
+  value: $[counter(variables['majorMinorVersion'], 0)]
+  
+- name: isMain
+  value: $[eq(variables['Build.SourceBranch'], 'refs/heads/main')]
+- name: isDev
+  value: $[eq(variables['Build.SourceBranch'], 'refs/heads/develop')]
+  
+- name: DOCKER_REPOSITORY_NAME
+  value: 'baader/device-opcua-go'
+- name: SERVICE_CONNECTION
+  value: 'bOne-platform-azure-container-registry'
+
+stages:
+- stage: Build
+  displayName: Build image
+  jobs:
+  - job: BuildDevOrMain
+    condition: and(succeeded(), or(eq(variables.isMain, true), eq(variables.isDev, true)))
+    displayName: Build in develop or main
+    pool:
+      vmImage: ubuntu-latest
+    steps:    
+    # Docker image build to acr on main / dev
+    - task: Docker@2
+      displayName: 'Build and push image to acr'
+      inputs:
+        command: 'buildAndPush'
+        repository: $(DOCKER_REPOSITORY_NAME)
+        Dockerfile: '$(Build.SourcesDirectory)/Dockerfile'
+        containerRegistry: $(SERVICE_CONNECTION)
+        tags: |
+          $(exactVersionTag)
+          $(majorMinorTag)
+          $(latestTag)
+    
+  - job: BuildWip
+    condition: and(succeeded(), eq(variables.isMain, false), eq(variables.isDev, false))
+    displayName: Build work in progress 
+    pool:
+      vmImage: ubuntu-latest
+    steps:
+    # this increases the tracebility of a container in dev mode. 
+    # Using the shorthash you can directly reference the sources of the work in progress
+    - powershell: |
+        $shortHash = "$(Build.SourceVersion)".Substring(0, 7)
+        Write-Host "##vso[task.setvariable variable=shortHash]$shortHash"
+      displayName: Set Short Hash      
+      
+    # override the build number with the short hash
+    - powershell: Write-Host "##vso[build.updatebuildnumber]$(majorMinorVersion).$(patchVersion)$(extension)-$(shortHash)"
+      displayName: Update Build Number when using pull request build      
+      
+    # Docker image build to acr on pull request, on specific branch
+    - task: Docker@2
+      displayName: 'Build and push image to acr'
+      inputs:
+        command: 'buildAndPush'
+        repository: $(DOCKER_REPOSITORY_NAME)
+        Dockerfile: '$(Build.SourcesDirectory)/Dockerfile'
+        containerRegistry: $(SERVICE_CONNECTION)
+        tags: |
+          $(exactVersionTag)
+    

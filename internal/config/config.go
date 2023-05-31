@@ -10,7 +10,6 @@ package config
 
 import (
 	"fmt"
-
 	"github.com/edgexfoundry/go-mod-core-contracts/v2/errors"
 	"github.com/edgexfoundry/go-mod-core-contracts/v2/models"
 )
@@ -35,12 +34,29 @@ func (sw *ServiceConfig) UpdateFromRaw(rawConfig interface{}) bool {
 
 // OPCUAServerConfig server information defined by the device profile
 type OPCUAServerConfig struct {
-	DeviceName string
-	Policy     string
-	Mode       string
-	CertFile   string
-	KeyFile    string
-	Writable   WritableInfo
+	DeviceName            string
+	Policy                string
+	Mode                  string
+	Endpoint              string
+	CredentialsPath       string
+	CertificateConfig     CertificateConfiguration
+	CredentialsRetryTime  int
+	CredentialsRetryWait  int
+	ConnEstablishingRetry int
+	ConnRetryWaitTime     int
+	Writable              WritableInfo
+}
+
+// CertificateConfiguration config information regarding the certificate
+type CertificateConfiguration struct {
+	CertFile            string
+	CertOrganization    string
+	CertCountry         string
+	CertProvince        string
+	CertLocality        string
+	CertBits            int
+	CertFilePermissions string
+	KeyFile             string
 }
 
 // WritableInfo configuration data that can be written without restarting the service
@@ -53,6 +69,11 @@ var policies map[string]int = map[string]int{
 	"Basic128Rsa15":  2,
 	"Basic256":       3,
 	"Basic256Sha256": 4,
+}
+
+type Credentials struct {
+	Username string
+	Password string
 }
 
 var modes map[string]int = map[string]int{
@@ -74,10 +95,10 @@ func (info *OPCUAServerConfig) Validate() errors.EdgeX {
 		return errors.NewCommonEdgeX(errors.KindContractInvalid, "OPCUAServerInfo.Mode configuration setting mismatch", nil)
 	}
 	if info.Mode != "None" || info.Policy != "None" {
-		if info.CertFile == "" {
+		if info.CertificateConfig.CertFile == "" {
 			return errors.NewCommonEdgeX(errors.KindContractInvalid, "OPCUAServerInfo.CertFile configuration setting cannot be blank when a security mode or policy is set", nil)
 		}
-		if info.KeyFile == "" {
+		if info.CertificateConfig.KeyFile == "" {
 			return errors.NewCommonEdgeX(errors.KindContractInvalid, "OPCUAServerInfo.KeyFile configuration setting cannot be blank when a security mode or policy is set", nil)
 		}
 	}

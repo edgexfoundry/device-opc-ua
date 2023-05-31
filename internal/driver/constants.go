@@ -7,11 +7,12 @@
 package driver
 
 const (
-	// CustomConfigSectionName is the name of the configuration options
+	// InsecureSecretsConfigSectionName is the name of the configuration options
+	// section for username and password in /cmd/res/configuration.toml
+	InsecureSecretsConfigSectionName = "/Writable/InsecureSecrets/OPCUA/Secrets"
+	// CustomConfigSectionName is the name of the opcua configuration options
 	// section in /cmd/res/configuration.toml
-	CustomConfigSectionName = "OPCUAServer"
-	// WritableInfoSectionName is the Writable section key
-	WritableInfoSectionName = CustomConfigSectionName + "/Writable"
+	CustomConfigSectionName = "/OPCUAServer/Writable"
 )
 
 const (

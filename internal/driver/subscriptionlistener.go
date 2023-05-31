@@ -14,7 +14,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/edgexfoundry/device-opcua-go/internal/config"
 	sdkModels "github.com/edgexfoundry/device-sdk-go/v2/pkg/models"
 	"github.com/edgexfoundry/device-sdk-go/v2/pkg/service"
 	"github.com/edgexfoundry/go-mod-core-contracts/v2/models"
@@ -98,38 +97,13 @@ func (d *Driver) startSubscriptionListener() error {
 }
 
 func (d *Driver) getClient(device models.Device) (*opcua.Client, error) {
-	var (
-		policy   = d.serviceConfig.OPCUAServer.Policy
-		mode     = d.serviceConfig.OPCUAServer.Mode
-		certFile = d.serviceConfig.OPCUAServer.CertFile
-		keyFile  = d.serviceConfig.OPCUAServer.KeyFile
-	)
-
-	endpoint, xerr := config.FetchEndpoint(device.Protocols)
-	if xerr != nil {
-		return nil, xerr
-	}
-
-	endpoints, err := opcua.GetEndpoints(endpoint)
+	opts, err := d.createClientOptions()
 	if err != nil {
+		d.Logger.Warnf("Driver.getClient: Failed to create OPCUA client options, %s", err)
 		return nil, err
 	}
-	ep := opcua.SelectEndpoint(endpoints, policy, ua.MessageSecurityModeFromString(mode))
-	if ep == nil {
-		return nil, fmt.Errorf("[Incoming listener] Failed to find suitable endpoint")
-	}
-	ep.EndpointURL = endpoint
 
-	opts := []opcua.Option{
-		opcua.SecurityPolicy(policy),
-		opcua.SecurityModeString(mode),
-		opcua.CertificateFile(certFile),
-		opcua.PrivateKeyFile(keyFile),
-		opcua.AuthAnonymous(),
-		opcua.SecurityFromEndpoint(ep, ua.UserTokenTypeAnonymous),
-	}
-
-	return opcua.NewClient(ep.EndpointURL, opts...), nil
+	return opcua.NewClient(d.serviceConfig.OPCUAServer.Endpoint, opts...), nil
 }
 
 func (d *Driver) configureMonitoredItems(sub *opcua.Subscription, resources, deviceName string) error {
@@ -176,17 +150,17 @@ func (d *Driver) configureMonitoredItems(sub *opcua.Subscription, resources, dev
 func (d *Driver) handleDataChange(dcn *ua.DataChangeNotification) {
 	d.mu.Lock()
 	defer d.mu.Unlock()
-
 	for _, item := range dcn.MonitoredItems {
 		data := item.Value.Value.Value()
+		value := item.Value.Value
 		nodeName := d.resourceMap[item.ClientHandle]
-		if err := d.onIncomingDataReceived(data, nodeName); err != nil {
+		if err := d.onIncomingDataReceived(data, nodeName, value); err != nil {
 			d.Logger.Errorf("%v", err)
 		}
 	}
 }
 
-func (d *Driver) onIncomingDataReceived(data interface{}, nodeResourceName string) error {
+func (d *Driver) onIncomingDataReceived(data interface{}, nodeResourceName string, value *ua.Variant) error {
 	deviceName := d.serviceConfig.OPCUAServer.DeviceName
 	reading := data
 
@@ -207,6 +181,10 @@ func (d *Driver) onIncomingDataReceived(data interface{}, nodeResourceName strin
 	}
 
 	result, err := newResult(req, reading)
+
+	sourceTimestamp := extractSourceTimestamp(value.DataValue())
+	result.Tags["source timestamp"] = sourceTimestamp.String()
+
 	if err != nil {
 		d.Logger.Warnf("[Incoming listener] Incoming reading ignored. name=%v deviceResource=%v value=%v", deviceName, nodeResourceName, data)
 		return nil

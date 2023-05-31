@@ -7,15 +7,14 @@
 package driver
 
 import (
-	"reflect"
-	"testing"
-
 	"github.com/edgexfoundry/device-opcua-go/internal/config"
 	"github.com/edgexfoundry/device-opcua-go/internal/test"
 	sdkModel "github.com/edgexfoundry/device-sdk-go/v2/pkg/models"
 	"github.com/edgexfoundry/go-mod-core-contracts/v2/clients/logger"
 	"github.com/edgexfoundry/go-mod-core-contracts/v2/common"
 	"github.com/edgexfoundry/go-mod-core-contracts/v2/models"
+	"reflect"
+	"testing"
 )
 
 func TestDriver_HandleReadCommands(t *testing.T) {
