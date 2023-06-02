@@ -19,7 +19,7 @@ variables:
 - name : extension
   ${{ if eq(variables['Build.SourceBranchName'], 'main') }}:
     value: ''
-  ${{ if eq(variables['Build.SourceBranchName'], 'develop') }}:
+  ${{ elseif eq(variables['Build.SourceBranchName'], 'develop') }}:
     value: '-develop'
   ${{ else }}:
     value: '-wip'
