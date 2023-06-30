@@ -4,127 +4,131 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
-package driver
+package test
 
 import (
 	"github.com/edgexfoundry/device-opcua-go/internal/config"
-	"github.com/edgexfoundry/device-opcua-go/internal/test"
+	"github.com/edgexfoundry/device-opcua-go/internal/driver"
 	sdkModel "github.com/edgexfoundry/device-sdk-go/v2/pkg/models"
 	"github.com/edgexfoundry/go-mod-core-contracts/v2/clients/logger"
 	"github.com/edgexfoundry/go-mod-core-contracts/v2/common"
 	"github.com/edgexfoundry/go-mod-core-contracts/v2/models"
+	"github.com/gopcua/opcua"
 	"reflect"
 	"testing"
 )
 
-func TestDriver_HandleReadCommands(t *testing.T) {
+var defaultServiceConfig = config.ServiceConfig{OPCUAServer: config.OPCUAServerConfig{Endpoint: Protocol + Address}}
+var emptyEndpoitConfig = config.ServiceConfig{OPCUAServer: config.OPCUAServerConfig{Endpoint: ""}}
+var defaultProtocol = map[string]models.ProtocolProperties{
+	config.Protocol: {config.Endpoint: Protocol + Address},
+}
+
+func TestDriverHandleReadCommands(t *testing.T) {
 	type args struct {
 		deviceName string
 		protocols  map[string]models.ProtocolProperties
 		reqs       []sdkModel.CommandRequest
 	}
 	tests := []struct {
-		name    string
-		args    args
-		want    []*sdkModel.CommandValue
-		wantErr bool
+		name          string
+		args          args
+		serviceConfig config.ServiceConfig
+		want          []*sdkModel.CommandValue
+		wantErr       bool
 	}{
 		{
 			name: "NOK - no endpoint defined",
 			args: args{
-				deviceName: "Test",
+				deviceName: "Test1",
 				protocols:  map[string]models.ProtocolProperties{config.Protocol: {}},
 				reqs:       []sdkModel.CommandRequest{{DeviceResourceName: "TestVar1"}},
 			},
-			want:    nil,
-			wantErr: true,
+			serviceConfig: emptyEndpoitConfig,
+			want:          nil,
+			wantErr:       true,
 		},
 		{
 			name: "NOK - invalid endpoint defined",
 			args: args{
-				deviceName: "Test",
+				deviceName: "Test2",
 				protocols: map[string]models.ProtocolProperties{
-					config.Protocol: {config.Endpoint: test.Protocol + "unknown"},
+					config.Protocol: {config.Endpoint: Protocol + "unknown"},
 				},
 				reqs: []sdkModel.CommandRequest{{DeviceResourceName: "TestVar1"}},
 			},
-			want:    nil,
-			wantErr: true,
+			serviceConfig: emptyEndpoitConfig,
+			want:          nil,
+			wantErr:       true,
 		},
 		{
 			name: "NOK - non-existent variable",
 			args: args{
-				deviceName: "Test",
-				protocols: map[string]models.ProtocolProperties{
-					config.Protocol: {config.Endpoint: test.Protocol + test.Address},
-				},
+				deviceName: "Test3",
+				protocols:  defaultProtocol,
 				reqs: []sdkModel.CommandRequest{{
 					DeviceResourceName: "TestVar1",
-					Attributes:         map[string]interface{}{NODE: "ns=2;s=fake"},
+					Attributes:         map[string]interface{}{driver.NODE: "ns=2;s=fake"},
 					Type:               common.ValueTypeInt32,
 				}},
 			},
-			want:    make([]*sdkModel.CommandValue, 1),
-			wantErr: true,
+			serviceConfig: defaultServiceConfig,
+			want:          make([]*sdkModel.CommandValue, 1),
+			wantErr:       true,
 		},
 		{
 			name: "NOK - read command - invalid node id",
 			args: args{
-				deviceName: "Test",
-				protocols: map[string]models.ProtocolProperties{
-					config.Protocol: {config.Endpoint: test.Protocol + test.Address},
-				},
+				deviceName: "Test4",
+				protocols:  defaultProtocol,
 				reqs: []sdkModel.CommandRequest{{
 					DeviceResourceName: "TestResource1",
-					Attributes:         map[string]interface{}{NODE: "2"},
+					Attributes:         map[string]interface{}{driver.NODE: "2"},
 					Type:               common.ValueTypeInt32,
 				}},
 			},
-			want:    make([]*sdkModel.CommandValue, 1),
-			wantErr: true,
+			serviceConfig: defaultServiceConfig,
+			want:          make([]*sdkModel.CommandValue, 1),
+			wantErr:       true,
 		},
 		{
 			name: "NOK - method call - invalid node id",
 			args: args{
-				deviceName: "Test",
-				protocols: map[string]models.ProtocolProperties{
-					config.Protocol: {config.Endpoint: test.Protocol + test.Address},
-				},
+				deviceName: "Test5",
+				protocols:  defaultProtocol,
 				reqs: []sdkModel.CommandRequest{{
 					DeviceResourceName: "TestResource1",
-					Attributes:         map[string]interface{}{METHOD: "ns=2;s=test"},
+					Attributes:         map[string]interface{}{driver.METHOD: "ns=2;s=test"},
 					Type:               common.ValueTypeInt32,
 				}},
 			},
-			want:    make([]*sdkModel.CommandValue, 1),
-			wantErr: true,
+			serviceConfig: defaultServiceConfig,
+			want:          make([]*sdkModel.CommandValue, 1),
+			wantErr:       true,
 		},
 		{
 			name: "NOK - method call - method does not exist",
 			args: args{
-				deviceName: "Test",
-				protocols: map[string]models.ProtocolProperties{
-					config.Protocol: {config.Endpoint: test.Protocol + test.Address},
-				},
+				deviceName: "Test6",
+				protocols:  defaultProtocol,
 				reqs: []sdkModel.CommandRequest{{
 					DeviceResourceName: "TestResource1",
-					Attributes:         map[string]interface{}{METHOD: "ns=2;s=test", OBJECT: "ns=2;s=main"},
+					Attributes:         map[string]interface{}{driver.METHOD: "ns=2;s=test", driver.OBJECT: "ns=2;s=main"},
 					Type:               common.ValueTypeInt32,
 				}},
 			},
-			want:    make([]*sdkModel.CommandValue, 1),
-			wantErr: true,
+			serviceConfig: defaultServiceConfig,
+			want:          make([]*sdkModel.CommandValue, 1),
+			wantErr:       true,
 		},
 		{
 			name: "OK - read value from mock server",
 			args: args{
-				deviceName: "Test",
-				protocols: map[string]models.ProtocolProperties{
-					config.Protocol: {config.Endpoint: test.Protocol + test.Address},
-				},
+				deviceName: "Test7",
+				protocols:  defaultProtocol,
 				reqs: []sdkModel.CommandRequest{{
 					DeviceResourceName: "TestVar1",
-					Attributes:         map[string]interface{}{NODE: "ns=2;s=ro_int32"},
+					Attributes:         map[string]interface{}{driver.NODE: "ns=2;s=ro_int32"},
 					Type:               common.ValueTypeInt32,
 				}},
 			},
@@ -134,18 +138,17 @@ func TestDriver_HandleReadCommands(t *testing.T) {
 				Value:              int32(5),
 				Tags:               make(map[string]string),
 			}},
-			wantErr: false,
+			serviceConfig: defaultServiceConfig,
+			wantErr:       false,
 		},
 		{
 			name: "OK - call method from mock server",
 			args: args{
-				deviceName: "Test",
-				protocols: map[string]models.ProtocolProperties{
-					config.Protocol: {config.Endpoint: test.Protocol + test.Address},
-				},
+				deviceName: "Test8",
+				protocols:  defaultProtocol,
 				reqs: []sdkModel.CommandRequest{{
 					DeviceResourceName: "SquareResource",
-					Attributes:         map[string]interface{}{METHOD: "ns=2;s=square", OBJECT: "ns=2;s=main", INPUTMAP: []interface{}{"2"}},
+					Attributes:         map[string]interface{}{driver.METHOD: "ns=2;s=square", driver.OBJECT: "ns=2;s=main", driver.INPUTMAP: []interface{}{"2"}},
 					Type:               common.ValueTypeInt64,
 				}},
 			},
@@ -155,26 +158,35 @@ func TestDriver_HandleReadCommands(t *testing.T) {
 				Value:              int64(4),
 				Tags:               make(map[string]string),
 			}},
-			wantErr: false,
+			serviceConfig: defaultServiceConfig,
+			wantErr:       false,
 		},
 	}
 
-	server := test.NewServer("../test/opcua_server.py")
-	defer server.Close()
+	server := NewServer("../test/opcua_server.py")
+	defer closeServer(server)
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			d := &Driver{
+			d := &driver.Driver{
 				Logger: &logger.MockLogger{},
 			}
+			d.ServiceConfig = &tt.serviceConfig
+			driver.ClientOptions = func() ([]opcua.Option, error) {
+				var opts []opcua.Option
+				return opts, nil
+			}
+
+			// mock client options creation here since it is the same for every test
 			got, err := d.HandleReadCommands(tt.args.deviceName, tt.args.protocols, tt.args.reqs)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("Driver.HandleReadCommands() error = %v, wantErr %v", err, tt.wantErr)
 				return
 			}
-			// Ignore Origin for DeepEqual
+			// Ignore Origin and source timestamp for DeepEqual
 			if len(got) > 0 && got[0] != nil {
 				got[0].Origin = 0
+				got[0].Tags = map[string]string{}
 			}
 			if !reflect.DeepEqual(got, tt.want) {
 				t.Errorf("Driver.HandleReadCommands() = %v, want %v", got, tt.want)

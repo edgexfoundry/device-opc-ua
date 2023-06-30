@@ -33,7 +33,7 @@ def square(parent, variant):
 # https://github.com/gopcua/opcua/blob/affd2bf105fe37786d69cd3607b5f7ed085f8c90/uatest/rw_server.py
 if __name__ == "__main__":
     server = Server()
-    server.set_endpoint("opc.tcp://0.0.0.0:48408/")
+    server.set_endpoint("opc.tcp://0.0.0.0:9999/")
 
     ns = server.register_namespace("http://gopcua.com/")
     main = server.nodes.objects.add_object(ua.NodeId("main", ns), "main")

@@ -4,21 +4,30 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
-package driver
+package test
 
 import (
 	"context"
 	"crypto/tls"
 	"github.com/edgexfoundry/device-opcua-go/internal/config"
+	"github.com/edgexfoundry/device-opcua-go/internal/driver"
 	sdkModel "github.com/edgexfoundry/device-sdk-go/v2/pkg/models"
 	"github.com/edgexfoundry/go-mod-core-contracts/v2/clients/logger"
 	"github.com/edgexfoundry/go-mod-core-contracts/v2/models"
+	"github.com/gopcua/opcua"
 	"github.com/gopcua/opcua/ua"
 	"github.com/pkg/errors"
 	"testing"
 )
 
-func TestDriver_updateWritableConfig(t *testing.T) {
+// helper function to be used in several test classes
+func closeServer(server *Server) {
+	err := server.Close()
+	if err != nil {
+		// do nothing
+	}
+}
+func TestDriverUpdateWritableConfig(t *testing.T) {
 	type args struct {
 		rawWritableConfig interface{}
 	}
@@ -37,16 +46,16 @@ func TestDriver_updateWritableConfig(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			d := &Driver{
+			d := &driver.Driver{
 				Logger:        &logger.MockLogger{},
-				serviceConfig: &config.ServiceConfig{},
+				ServiceConfig: &config.ServiceConfig{},
 			}
-			d.updateWritableConfig(tt.args.rawWritableConfig)
+			d.UpdateWritableConfig(tt.args.rawWritableConfig)
 		})
 	}
 }
 
-func TestDriver_AddDevice(t *testing.T) {
+func TestDriverAddDevice(t *testing.T) {
 	type args struct {
 		deviceName string
 		protocols  map[string]models.ProtocolProperties
@@ -65,9 +74,9 @@ func TestDriver_AddDevice(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			d := NewProtocolDriver().(*Driver)
+			d := driver.NewProtocolDriver().(*driver.Driver)
 			d.Logger = &logger.MockLogger{}
-			d.serviceConfig = &config.ServiceConfig{OPCUAServer: config.OPCUAServerConfig{DeviceName: tt.args.deviceName}}
+			d.ServiceConfig = &config.ServiceConfig{OPCUAServer: config.OPCUAServerConfig{DeviceName: tt.args.deviceName}}
 			if err := d.AddDevice(tt.args.deviceName, tt.args.protocols, tt.args.adminState); (err != nil) != tt.wantErr {
 				t.Errorf("Driver.AddDevice() error = %v, wantErr %v", err, tt.wantErr)
 			}
@@ -75,7 +84,7 @@ func TestDriver_AddDevice(t *testing.T) {
 	}
 }
 
-func TestDriver_UpdateDevice(t *testing.T) {
+func TestDriverUpdateDevice(t *testing.T) {
 	type args struct {
 		deviceName string
 		protocols  map[string]models.ProtocolProperties
@@ -94,7 +103,7 @@ func TestDriver_UpdateDevice(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			d := &Driver{
+			d := &driver.Driver{
 				Logger: &logger.MockLogger{},
 			}
 			if err := d.UpdateDevice(tt.args.deviceName, tt.args.protocols, tt.args.adminState); (err != nil) != tt.wantErr {
@@ -103,39 +112,30 @@ func TestDriver_UpdateDevice(t *testing.T) {
 		})
 	}
 }
-func TestDriver_CreateClientOptions(t *testing.T) {
+func TestDriverCreateClientOptions(t *testing.T) {
 	tests := []struct {
 		name                 string
-		getter               func(endpoint string) ([]*ua.EndpointDescription, error)
-		certAndKeyReader     func(clientCertFileName, clientKeyFileName string) ([]byte, []byte, error)
-		certKeyPair          func(certPEMBlock []byte, keyPEMBlock []byte) (tls.Certificate, error)
+		getEndpointsMock     func(ctx context.Context, endpoint string, opt ...opcua.Option) ([]*ua.EndpointDescription, error)
+		certAndKeyReaderMock func(clientCertFileName, clientKeyFileName string) ([]byte, []byte, error)
+		certKeyPairMock      func(certPEMBlock []byte, keyPEMBlock []byte) (tls.Certificate, error)
 		serviceConfig        config.ServiceConfig
 		expectedResultLength int
 		wantErr              bool
 	}{
 		{
 			name: "OK - options created successfully",
-			getter: func(endpoint string) ([]*ua.EndpointDescription, error) {
+			getEndpointsMock: func(ctx context.Context, endpoint string, opt ...opcua.Option) ([]*ua.EndpointDescription, error) {
 				var endpoints []*ua.EndpointDescription
-				ep := &ua.EndpointDescription{
-					EndpointURL:         "",
-					Server:              nil,
-					ServerCertificate:   nil,
-					SecurityMode:        0,
-					SecurityPolicyURI:   "",
-					UserIdentityTokens:  nil,
-					TransportProfileURI: "",
-					SecurityLevel:       0,
-				}
+				ep := &ua.EndpointDescription{}
 				endpoints = append(endpoints, ep)
 				return endpoints, nil
 			},
-			certAndKeyReader: func(clientCertFileName, clientKeyFileName string) ([]byte, []byte, error) {
-				var cert = []byte{}
-				var key = []byte{}
+			certAndKeyReaderMock: func(clientCertFileName, clientKeyFileName string) ([]byte, []byte, error) {
+				var cert []byte
+				var key []byte
 				return cert, key, nil
 			},
-			certKeyPair: func(certPEMBlock []byte, keyPEMBlock []byte) (tls.Certificate, error) {
+			certKeyPairMock: func(certPEMBlock []byte, keyPEMBlock []byte) (tls.Certificate, error) {
 				a := [][]byte{
 					{0, 1, 2, 3},
 					{4, 5, 6, 7},
@@ -144,12 +144,12 @@ func TestDriver_CreateClientOptions(t *testing.T) {
 				return cert, nil
 			},
 			serviceConfig:        config.ServiceConfig{OPCUAServer: config.OPCUAServerConfig{Endpoint: "127.0.0.1", Policy: "Ba256Sha256", Mode: "SignAndEncrypt"}},
-			expectedResultLength: 7,
+			expectedResultLength: 10,
 			wantErr:              false,
 		},
 		{
 			name: "NOK - options not created when endpoints cannot be fetched",
-			getter: func(endpoint string) ([]*ua.EndpointDescription, error) {
+			getEndpointsMock: func(ctx context.Context, endpoint string, opt ...opcua.Option) ([]*ua.EndpointDescription, error) {
 				return nil, errors.New("random endpoint error")
 			},
 			expectedResultLength: 0,
@@ -157,18 +157,9 @@ func TestDriver_CreateClientOptions(t *testing.T) {
 		},
 		{
 			name: "OK - options created correctly with no security policy",
-			getter: func(endpoint string) ([]*ua.EndpointDescription, error) {
+			getEndpointsMock: func(ctx context.Context, endpoint string, opt ...opcua.Option) ([]*ua.EndpointDescription, error) {
 				var endpoints []*ua.EndpointDescription
-				ep := &ua.EndpointDescription{
-					EndpointURL:         "",
-					Server:              nil,
-					ServerCertificate:   nil,
-					SecurityMode:        0,
-					SecurityPolicyURI:   "",
-					UserIdentityTokens:  nil,
-					TransportProfileURI: "",
-					SecurityLevel:       0,
-				}
+				ep := &ua.EndpointDescription{}
 				endpoints = append(endpoints, ep)
 				return endpoints, nil
 			},
@@ -179,27 +170,20 @@ func TestDriver_CreateClientOptions(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			d := &Driver{
+			d := &driver.Driver{
 				Logger: &logger.MockLogger{},
 			}
-			d.serviceConfig = &tt.serviceConfig
-			GetEndpoints = tt.getter
-			ReadCertAndKey = tt.certAndKeyReader
-			CertKeyPair = tt.certKeyPair
-			SelectEndPoint = func(endpoints []*ua.EndpointDescription, policy string, mode ua.MessageSecurityMode) *ua.EndpointDescription {
-				description := &ua.EndpointDescription{
-					EndpointURL:         "",
-					Server:              nil,
-					ServerCertificate:   nil,
-					SecurityMode:        0,
-					SecurityPolicyURI:   "",
-					UserIdentityTokens:  nil,
-					TransportProfileURI: "",
-					SecurityLevel:       0,
-				}
+			d.ServiceConfig = &tt.serviceConfig
+			driver.GetEndpoints = tt.getEndpointsMock
+			driver.ReadCertAndKey = tt.certAndKeyReaderMock
+			driver.CertKeyPair = tt.certKeyPairMock
+
+			// can be mocked here since it is the same for every test
+			driver.SelectEndPoint = func(endpoints []*ua.EndpointDescription, policy string, mode ua.MessageSecurityMode) *ua.EndpointDescription {
+				description := &ua.EndpointDescription{}
 				return description
 			}
-			opts, err := d.createClientOptions()
+			opts, err := d.CreateClientOptions()
 			if (err != nil) != tt.wantErr {
 				t.Errorf("Driver.CreateClientOptions()  = %v, wantErr %v", err, tt.wantErr)
 				return
@@ -210,7 +194,7 @@ func TestDriver_CreateClientOptions(t *testing.T) {
 		})
 	}
 }
-func TestDriver_Stop(t *testing.T) {
+func TestDriverStop(t *testing.T) {
 	type args struct {
 		force bool
 	}
@@ -229,9 +213,9 @@ func TestDriver_Stop(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			ctx := context.Background()
 			_, cancel := context.WithCancel(ctx)
-			d := &Driver{
+			d := &driver.Driver{
 				Logger:    &logger.MockLogger{},
-				ctxCancel: cancel,
+				CtxCancel: cancel,
 			}
 			if err := d.Stop(tt.args.force); (err != nil) != tt.wantErr {
 				t.Errorf("Driver.Stop() error = %v, wantErr %v", err, tt.wantErr)
@@ -240,7 +224,7 @@ func TestDriver_Stop(t *testing.T) {
 	}
 }
 
-func Test_getNodeID(t *testing.T) {
+func TestGetNodeID(t *testing.T) {
 	type args struct {
 		attrs map[string]interface{}
 		id    string
@@ -253,20 +237,20 @@ func Test_getNodeID(t *testing.T) {
 	}{
 		{
 			name:    "NOK - key does not exist",
-			args:    args{attrs: map[string]interface{}{NODE: "ns=2"}, id: "fail"},
+			args:    args{attrs: map[string]interface{}{driver.NODE: "ns=2"}, id: "fail"},
 			want:    "",
 			wantErr: true,
 		},
 		{
 			name:    "OK - node id returned",
-			args:    args{attrs: map[string]interface{}{NODE: "ns=2;s=edgex/int32/var0"}, id: NODE},
+			args:    args{attrs: map[string]interface{}{driver.NODE: "ns=2;s=edgex/int32/var0"}, id: driver.NODE},
 			want:    "ns=2;s=edgex/int32/var0",
 			wantErr: false,
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := getNodeID(tt.args.attrs, tt.args.id)
+			got, err := driver.GetNodeID(tt.args.attrs, tt.args.id)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("buildNodeID() error = %v, wantErr %v", err, tt.wantErr)
 				return
@@ -278,9 +262,9 @@ func Test_getNodeID(t *testing.T) {
 	}
 }
 
-func TestDriver_Initialize(t *testing.T) {
+func TestDriverInitialize(t *testing.T) {
 	t.Run("initialize", func(t *testing.T) {
-		d := NewProtocolDriver()
+		d := driver.NewProtocolDriver()
 		err := d.Initialize(&logger.MockLogger{}, make(chan<- *sdkModel.AsyncValues), make(chan<- []sdkModel.DiscoveredDevice))
 		if err == nil {
 			t.Errorf("expected error to be returned in test environment")

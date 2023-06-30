@@ -44,6 +44,7 @@ type OPCUAServerConfig struct {
 	CredentialsRetryWait  int
 	ConnEstablishingRetry int
 	ConnRetryWaitTime     int
+	SubscriptionInterval  int
 	Writable              WritableInfo
 }
 

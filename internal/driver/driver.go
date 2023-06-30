@@ -42,10 +42,10 @@ var driver *Driver
 type Driver struct {
 	Logger        logger.LoggingClient
 	AsyncCh       chan<- *sdkModel.AsyncValues
-	serviceConfig *config.ServiceConfig
+	ServiceConfig *config.ServiceConfig
 	resourceMap   map[uint32]string
 	mu            sync.Mutex
-	ctxCancel     context.CancelFunc
+	CtxCancel     context.CancelFunc
 }
 
 // NewProtocolDriver returns a new protocol driver object
@@ -55,14 +55,26 @@ func NewProtocolDriver() sdkModel.ProtocolDriver {
 	})
 	return driver
 }
+
+func startupSubscriptionListener(d *Driver) {
+	for {
+		d.Logger.Infof("start subscriber")
+		err := d.startSubscriber()
+
+		if err == nil {
+			break
+		}
+		time.Sleep(5 * time.Second)
+	}
+}
 func createX509Template() x509.Certificate {
 	template := x509.Certificate{
 		SerialNumber: big.NewInt(2023),
 		Subject: pkix.Name{
-			Organization: []string{driver.serviceConfig.OPCUAServer.CertificateConfig.CertOrganization},
-			Country:      []string{driver.serviceConfig.OPCUAServer.CertificateConfig.CertCountry},
-			Province:     []string{driver.serviceConfig.OPCUAServer.CertificateConfig.CertProvince},
-			Locality:     []string{driver.serviceConfig.OPCUAServer.CertificateConfig.CertLocality},
+			Organization: []string{driver.ServiceConfig.OPCUAServer.CertificateConfig.CertOrganization},
+			Country:      []string{driver.ServiceConfig.OPCUAServer.CertificateConfig.CertCountry},
+			Province:     []string{driver.ServiceConfig.OPCUAServer.CertificateConfig.CertProvince},
+			Locality:     []string{driver.ServiceConfig.OPCUAServer.CertificateConfig.CertLocality},
 		},
 		NotBefore:             time.Now(),
 		NotAfter:              time.Now().AddDate(10, 0, 0),
@@ -72,10 +84,10 @@ func createX509Template() x509.Certificate {
 }
 
 // Initialize performs protocol-specific initialization for the device service
-func (d *Driver) Initialize(lc logger.LoggingClient, asyncCh chan<- *sdkModel.AsyncValues, deviceCh chan<- []sdkModel.DiscoveredDevice) error {
+func (d *Driver) Initialize(lc logger.LoggingClient, asyncCh chan<- *sdkModel.AsyncValues, _ chan<- []sdkModel.DiscoveredDevice) error {
 	d.Logger = lc
 	d.AsyncCh = asyncCh
-	d.serviceConfig = &config.ServiceConfig{}
+	d.ServiceConfig = &config.ServiceConfig{}
 	d.mu.Lock()
 	d.resourceMap = make(map[uint32]string)
 	d.mu.Unlock()
@@ -84,24 +96,27 @@ func (d *Driver) Initialize(lc logger.LoggingClient, asyncCh chan<- *sdkModel.As
 		return errors.NewCommonEdgeXWrapper(fmt.Errorf("unable to get running device service"))
 	}
 
-	if err := ds.LoadCustomConfig(d.serviceConfig, CustomConfigSectionName); err != nil {
+	if err := ds.LoadCustomConfig(d.ServiceConfig, CustomConfigSectionName); err != nil {
 		return errors.NewCommonEdgeX(errors.Kind(err), fmt.Sprintf("unable to load '%s' custom configuration", CustomConfigSectionName), err)
 	}
 
-	lc.Debugf("Custom config is: %v", d.serviceConfig)
+	lc.Debugf("Custom config is: %v", d.ServiceConfig)
 
-	if err := d.serviceConfig.OPCUAServer.Validate(); err != nil {
+	if err := d.ServiceConfig.OPCUAServer.Validate(); err != nil {
 		return errors.NewCommonEdgeXWrapper(err)
 	}
 
 	// Add listener for username and password changes in insecure secrets config section
-	if err := ds.ListenForCustomConfigChanges(&d.serviceConfig.OPCUAServer.Writable, InsecureSecretsConfigSectionName, d.updateWritableConfig); err != nil {
+	if err := ds.ListenForCustomConfigChanges(&d.ServiceConfig.OPCUAServer.Writable, InsecureSecretsConfigSectionName, d.UpdateWritableConfig); err != nil {
 		return errors.NewCommonEdgeX(errors.Kind(err), fmt.Sprintf("unable to listen for changes for '%s' custom configuration", InsecureSecretsConfigSectionName), err)
 	}
 	// Add listener for changes in opcua custom config section
-	if err := ds.ListenForCustomConfigChanges(&d.serviceConfig.OPCUAServer.Writable, CustomConfigSectionName, d.updateWritableConfig); err != nil {
+	if err := ds.ListenForCustomConfigChanges(&d.ServiceConfig.OPCUAServer.Writable, CustomConfigSectionName, d.UpdateWritableConfig); err != nil {
 		return errors.NewCommonEdgeX(errors.Kind(err), fmt.Sprintf("unable to listen for changes for '%s' custom configuration", CustomConfigSectionName), err)
 	}
+
+	go startupSubscriptionListener(d)
+
 	return nil
 }
 
@@ -117,7 +132,7 @@ var (
 
 // ReadCertAndKey capsules the containing method for easy mocking in unit tests
 var (
-	ReadCertAndKey = ReadClientCertAndPrivateKey
+	ReadCertAndKey = readClientCertAndPrivateKey
 )
 
 // CertKeyPair capsules the containing method for easy mocking in unit tests
@@ -125,20 +140,28 @@ var (
 	CertKeyPair = tls.X509KeyPair
 )
 
-func ReadClientCertAndPrivateKey(clientCertFileName, clientKeyFileName string) ([]byte, []byte, error) {
+func CreateClientOptionsWrapper() ([]opcua.Option, error) {
+	return driver.CreateClientOptions()
+}
+
+var (
+	ClientOptions = CreateClientOptionsWrapper
+)
+
+func readClientCertAndPrivateKey(clientCertFileName, clientKeyFileName string) ([]byte, []byte, error) {
 	clientCertificate, err := os.ReadFile(clientCertFileName)
 	var privateKey []byte = nil
 
 	if err != nil {
 		log.Println("Client certificate not existing, creating new one")
 
-		clientCert, clientKey, err := CreateSelfSignedClientCertificates("localhost")
+		clientCert, clientKey, err := createSelfSignedClientCertificates("localhost")
 		if err != nil {
 			return nil, nil, err
 		}
 
 		var perm int
-		perm, err = strconv.Atoi(driver.serviceConfig.OPCUAServer.CertificateConfig.CertFilePermissions)
+		perm, err = strconv.Atoi(driver.ServiceConfig.OPCUAServer.CertificateConfig.CertFilePermissions)
 		if err != nil {
 			log.Println("Could not convert permission string to uint:", err)
 			return nil, nil, err
@@ -155,18 +178,19 @@ func ReadClientCertAndPrivateKey(clientCertFileName, clientKeyFileName string) (
 
 		clientCertificate = clientCert
 		privateKey = clientKey
+		log.Println("Successfully created certificates, written to file")
 	} else {
 		privateKey, err = os.ReadFile(clientKeyFileName)
 		if err != nil {
 			return nil, nil, err
 		}
+		log.Println("Successfully load certificates from file")
 	}
-	println("Successfully load certificates from file")
 	return clientCertificate, privateKey, nil
 }
-func CreateSelfSignedClientCertificates(clientName string) ([]byte, []byte, error) {
+func createSelfSignedClientCertificates(clientName string) ([]byte, []byte, error) {
 	template := createX509Template()
-	clientPrivateKey, err := rsa.GenerateKey(rand.Reader, driver.serviceConfig.OPCUAServer.CertificateConfig.CertBits)
+	clientPrivateKey, err := rsa.GenerateKey(rand.Reader, driver.ServiceConfig.OPCUAServer.CertificateConfig.CertBits)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -193,14 +217,14 @@ func setClientTemplateOptions(template x509.Certificate, commonName string) x509
 	return template
 }
 
-// creates the options to connect with a opcua Client based on the configured options.
-func (d *Driver) createClientOptions() ([]opcua.Option, error) {
-	availableServerEndpoints, err := GetEndpoints(d.serviceConfig.OPCUAServer.Endpoint)
+// CreateClientOptions creates the options to connect with a opcua Client based on the configured options.
+func (d *Driver) CreateClientOptions() ([]opcua.Option, error) {
+	availableServerEndpoints, err := GetEndpoints(context.Background(), d.ServiceConfig.OPCUAServer.Endpoint)
 	if err != nil {
 		d.Logger.Error("OPC GetEndpoints: %w", err)
 		return nil, err
 	}
-	credentials, err := d.getCredentials(d.serviceConfig.OPCUAServer.CredentialsPath)
+	credentials, err := d.getCredentials(d.ServiceConfig.OPCUAServer.CredentialsPath)
 	if err != nil {
 		d.Logger.Error("getCredentials: %w", err)
 		return nil, err
@@ -209,8 +233,8 @@ func (d *Driver) createClientOptions() ([]opcua.Option, error) {
 	username := credentials.Username
 	password := credentials.Password
 
-	policy := ua.FormatSecurityPolicyURI(d.serviceConfig.OPCUAServer.Policy)
-	mode := ua.MessageSecurityModeFromString(d.serviceConfig.OPCUAServer.Mode)
+	policy := ua.FormatSecurityPolicyURI(d.ServiceConfig.OPCUAServer.Policy)
+	mode := ua.MessageSecurityModeFromString(d.ServiceConfig.OPCUAServer.Mode)
 
 	var opts []opcua.Option
 
@@ -218,8 +242,8 @@ func (d *Driver) createClientOptions() ([]opcua.Option, error) {
 
 	// no need to set options if no security policy is set
 	if mode != ua.MessageSecurityModeNone {
-		clientCertFileName := d.serviceConfig.OPCUAServer.CertificateConfig.CertFile
-		clientKeyFileName := d.serviceConfig.OPCUAServer.CertificateConfig.KeyFile
+		clientCertFileName := d.ServiceConfig.OPCUAServer.CertificateConfig.CertFile
+		clientKeyFileName := d.ServiceConfig.OPCUAServer.CertificateConfig.KeyFile
 
 		cert, key, err := ReadCertAndKey(clientCertFileName, clientKeyFileName)
 
@@ -238,6 +262,9 @@ func (d *Driver) createClientOptions() ([]opcua.Option, error) {
 		opts = []opcua.Option{
 			opcua.SecurityPolicy(policy),
 			opcua.SecurityMode(mode),
+			opcua.AutoReconnect(true),
+			opcua.ReconnectInterval(time.Second * 2),
+			opcua.RequestTimeout(time.Second * 3),
 			opcua.PrivateKey(pk),
 			opcua.Certificate(cert),                // Set the certificate for the OPC UA Client
 			opcua.AuthUsername(username, password), // Use this if you are using username and password
@@ -251,7 +278,7 @@ func (d *Driver) createClientOptions() ([]opcua.Option, error) {
 // Gets the username and password credentials from the configuration.
 func (d *Driver) getCredentials(secretPath string) (config.Credentials, error) {
 	credentials := config.Credentials{}
-	timer := startup.NewTimer(d.serviceConfig.OPCUAServer.CredentialsRetryTime, d.serviceConfig.OPCUAServer.CredentialsRetryWait)
+	timer := startup.NewTimer(d.ServiceConfig.OPCUAServer.CredentialsRetryTime, d.ServiceConfig.OPCUAServer.CredentialsRetryWait)
 	runningService := service.RunningService()
 	var secretData map[string]string
 	var err error
@@ -279,9 +306,9 @@ func (d *Driver) getCredentials(secretPath string) (config.Credentials, error) {
 	return credentials, nil
 }
 
-// Callback function provided to ListenForCustomConfigChanges to update
+// UpdateWritableConfig  is a callback function provided to ListenForCustomConfigChanges to update
 // the configuration a config section changes, for example via consul
-func (d *Driver) updateWritableConfig(rawWritableConfig interface{}) {
+func (d *Driver) UpdateWritableConfig(rawWritableConfig interface{}) {
 	updated, ok := rawWritableConfig.(*config.WritableInfo)
 	if !ok {
 		d.Logger.Error("unable to update writable config: Cannot cast raw config to type 'WritableInfo'")
@@ -290,47 +317,53 @@ func (d *Driver) updateWritableConfig(rawWritableConfig interface{}) {
 
 	d.cleanup()
 
-	d.serviceConfig.OPCUAServer.Writable = *updated
-	go d.startSubscriber()
+	d.ServiceConfig.OPCUAServer.Writable = *updated
+	go d.startSubscriberErrorHandling() // intentionally ignore the error here
 }
 
 // Start or restart the subscription listener
-func (d *Driver) startSubscriber() {
-	err := d.startSubscriptionListener()
+func (d *Driver) startSubscriberErrorHandling() {
+	err := d.startSubscriber()
 	if err != nil {
 		d.Logger.Errorf("Driver.Initialize: Start incoming data Listener failed: %v", err)
 	}
 }
 
+// Start or restart the subscription listener
+func (d *Driver) startSubscriber() error {
+	err := d.StartSubscriptionListener()
+	return err
+}
+
 // Close the existing context.
 // This, in turn, cancels the existing subscription if it exists
 func (d *Driver) cleanup() {
-	if d.ctxCancel != nil {
-		d.ctxCancel()
-		d.ctxCancel = nil
+	if d.CtxCancel != nil {
+		d.CtxCancel()
+		d.CtxCancel = nil
 	}
 }
 
 // AddDevice is a callback function that is invoked
 // when a new Device associated with this Device Service is added
-func (d *Driver) AddDevice(deviceName string, protocols map[string]models.ProtocolProperties, adminState models.AdminState) error {
+func (d *Driver) AddDevice(deviceName string, _ map[string]models.ProtocolProperties, _ models.AdminState) error {
 	// Start subscription listener when device is added.
 	// This does not happen automatically like it does when the device is updated
-	go d.startSubscriber()
+	// go d.startSubscriber() // removed because it is already started in initialize
 	d.Logger.Debugf("Device %s is added", deviceName)
 	return nil
 }
 
 // UpdateDevice is a callback function that is invoked
 // when a Device associated with this Device Service is updated
-func (d *Driver) UpdateDevice(deviceName string, protocols map[string]models.ProtocolProperties, adminState models.AdminState) error {
+func (d *Driver) UpdateDevice(deviceName string, _ map[string]models.ProtocolProperties, _ models.AdminState) error {
 	d.Logger.Debugf("Device %s is updated", deviceName)
 	return nil
 }
 
 // RemoveDevice is a callback function that is invoked
 // when a Device associated with this Device Service is removed
-func (d *Driver) RemoveDevice(deviceName string, protocols map[string]models.ProtocolProperties) error {
+func (d *Driver) RemoveDevice(deviceName string, _ map[string]models.ProtocolProperties) error {
 	d.Logger.Debugf("Device %s is removed", deviceName)
 	return nil
 }
@@ -339,7 +372,7 @@ func (d *Driver) RemoveDevice(deviceName string, protocols map[string]models.Pro
 // if the force parameter is 'true', immediately. The driver is responsible
 // for closing any in-use channels, including the channel used to send async
 // readings (if supported).
-func (d *Driver) Stop(force bool) error {
+func (d *Driver) Stop(_ bool) error {
 	d.mu.Lock()
 	d.resourceMap = nil
 	d.mu.Unlock()
@@ -347,7 +380,7 @@ func (d *Driver) Stop(force bool) error {
 	return nil
 }
 
-func getNodeID(attrs map[string]interface{}, id string) (string, error) {
+func GetNodeID(attrs map[string]interface{}, id string) (string, error) {
 	identifier, ok := attrs[id]
 	if !ok {
 		return "", fmt.Errorf("attribute %s does not exist", id)

@@ -17,7 +17,7 @@ import (
 	"github.com/spf13/cast"
 )
 
-func newResult(req sdkModel.CommandRequest, reading interface{}) (*sdkModel.CommandValue, error) {
+func NewResult(req sdkModel.CommandRequest, reading interface{}) (*sdkModel.CommandValue, error) {
 	var result = &sdkModel.CommandValue{}
 	var err error
 	castError := "fail to parse %v reading, %v"
@@ -106,7 +106,7 @@ func newResult(req sdkModel.CommandRequest, reading interface{}) (*sdkModel.Comm
 }
 
 // Gets either the source timestamp, server timestamp from a read value, or sets it to the current time.
-func extractSourceTimestamp(value *ua.DataValue) time.Time {
+func ExtractSourceTimestamp(value *ua.DataValue) time.Time {
 	var tm = time.Now()
 	if value != nil {
 		if !value.SourceTimestamp.IsZero() {
