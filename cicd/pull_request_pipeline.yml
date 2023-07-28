@@ -1,0 +1,80 @@
+steps:
+  #-------------------------------
+  # Prepare git & azure environment
+  #-------------------------------
+
+  - template: scripts/checkout-git-with-persistent-credentials.yml@azure-pipeline-template
+  - template: scripts/merging-strategy-on-main.yml@azure-pipeline-template
+  - template: scripts/apply-short-hash.yml@azure-pipeline-template
+
+  #-------------------------------
+  # Get tools ready
+  #-------------------------------
+
+  - script: |
+      sudo apt-get update
+      sudo apt-get install -qq -y libtool pkg-config build-essential autoconf automake
+      sudo apt-get install -qq -y libzmq3-dev
+      ##vso[task.setvariable variable=PKG_CONFIG_PATH]/usr/local/Cellar/zeromq/4.0.4/lib/pkgconfig/
+    displayName: Install libzmq
+
+  #-------------------------------
+  # Prepare Sonarcloud
+  #-------------------------------
+
+  # TODO better to be parametrized and pushed into the azure-pipeline-template repository
+  # scannerMode, configMode and extraProperties have to be a parameter
+  - task: SonarCloudPrepare@1
+    displayName: Prepare Sonarcloud
+    inputs:
+      SonarCloud: '$(sonar_cloud_endpoint_name)'
+      organization: '$(sonar_cloud_organization)'
+      scannerMode: 'CLI'
+      configMode: 'manual'
+      cliProjectKey : '$(sonarcloudProjectKey)'
+      projectName: '$(sonarcloudProjectName)'
+      extraProperties: |
+        sonar.go.tests.reportPaths=$(Build.SourcesDirectory)/report.json
+        sonar.go.coverage.reportPaths=$(Build.SourcesDirectory)/coverage.out
+        sonar.go.golangci-lint.reportPaths=$(Build.SourcesDirectory)/golangci-lint.out
+        sonar.projectVersion=$(majorMinorTag)  
+        sonar.exclusions=gopath/**/*,cicd/**/*,testfiles/*
+        sonar.tests=.
+        sonar.test.inclusions=**/*_test.go
+
+  #-------------------------------
+  # Build app service
+  #-------------------------------
+
+  - template: scripts/build-and-test-go.yml@azure-pipeline-template
+
+  #-------------------------------
+  # Publish test results
+  #-------------------------------
+
+  - template: scripts/push-test-results-to-azure.yml@azure-pipeline-template
+
+  #-------------------------------
+  # Check code styles
+  #-------------------------------
+
+  - task: SonarCloudAnalyze@1
+    continueOnError: true
+    displayName: 'Run SonarCloud analysis'
+
+  - task: SonarCloudPublish@1
+    displayName: Publish Sonarcloud
+    inputs:
+      pollingTimeoutSec: '300'
+
+  #-------------------------------
+  # Create executable packages
+  #-------------------------------
+
+  - task: CopyFiles@2
+    inputs:
+      TargetFolder: '$(Build.ArtifactStagingDirectory)'
+
+  - task: PublishBuildArtifacts@1
+    inputs:
+      artifactName: drop
