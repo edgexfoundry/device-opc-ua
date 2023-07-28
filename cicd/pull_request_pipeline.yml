@@ -11,6 +11,11 @@ steps:
   #-------------------------------
   # Merging release strategy
   #-------------------------------
+  # TODO @Marcos check why this is not working at github / use template again if possible
+  - script: | 
+      echo variables['System.PullRequest.SourceBranch']
+      
+
   - script: |
       echo merge origin/main into branch $(isReleaseCandidate)
       git merge origin/main
@@ -24,7 +29,7 @@ steps:
       echo "##vso[task.setvariable variable=extension]$(rc-extension)"
     workingDirectory: $(Build.SourcesDirectory)
     displayName: 'PR merge main into ReleaseCandidate branch'
-    condition: and(succeeded(), startsWith(variables['System.PullRequest.SourceBranch'], 'refs/heads/release/'))
+    condition: and(succeeded(), startsWith(variables['System.PullRequest.SourceBranch'], 'refs/release/'))
 
   - template: scripts/apply-short-hash.yml@azure-pipeline-template
 
