@@ -10,7 +10,7 @@ variables:
   # Used for docker
   - name: DOCKER_REPOSITORY_NAME
     value: 'baader/device-opcua-go'
-  - name: SERVICE_CONNECTION
+  - name: AZURE_CONTAINER_SERVICE_CONNECTION
     value: 'bOne-platform-azure-container-registry'
 
   # sonarcloud project key per project to define
