@@ -2,9 +2,30 @@ steps:
   #-------------------------------
   # Prepare git & azure environment
   #-------------------------------
+  - checkout: self
+    displayName: 'Git checkout'
+    persistCredentials: true
+    submodules: true
+    fetchDepth: 0
 
-  - template: scripts/checkout-git-with-persistent-credentials.yml@azure-pipeline-template
-  - template: scripts/merging-strategy-on-main.yml@azure-pipeline-template
+  #-------------------------------
+  # Merging release strategy
+  #-------------------------------
+  - script: |
+      echo merge origin/main into branch $(isReleaseCandidate)
+      git merge origin/main
+    workingDirectory: $(Build.SourcesDirectory)
+    displayName: 'Branch merge main into ReleaseCandidate branch'
+    condition: and(succeeded(), eq(variables['isReleaseCandidate'], true))
+
+  - script: |
+      echo merge origin/$(System.PullRequest.targetBranchName) into pr $(System.PullRequest.SourceBranch)
+      git merge origin/$(System.PullRequest.targetBranchName)
+      echo "##vso[task.setvariable variable=extension]$(rc-extension)"
+    workingDirectory: $(Build.SourcesDirectory)
+    displayName: 'PR merge main into ReleaseCandidate branch'
+    condition: and(succeeded(), startsWith(variables['System.PullRequest.SourceBranch'], 'refs/heads/release/'))
+
   - template: scripts/apply-short-hash.yml@azure-pipeline-template
 
   #-------------------------------
