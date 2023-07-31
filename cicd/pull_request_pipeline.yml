@@ -18,6 +18,8 @@ steps:
 
   - script: |
       echo merge origin/main into branch $(isReleaseCandidate)
+      git config user.email "$(user_email)"
+      git config user.name "$(user_name)"
       git merge origin/main
     workingDirectory: $(Build.SourcesDirectory)
     displayName: 'Branch merge main into ReleaseCandidate branch'

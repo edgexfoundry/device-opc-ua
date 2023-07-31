@@ -1,4 +1,5 @@
 variables:
+  - group: git-hub-user
   # Update version corresponding to our updates
   - name: majorMinorVersion
     value: 1.0.1
