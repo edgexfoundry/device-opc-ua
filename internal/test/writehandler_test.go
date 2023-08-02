@@ -4,46 +4,59 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
-package driver
+package test
 
 import (
+	"github.com/edgexfoundry/device-opcua-go/internal/driver"
+	"github.com/gopcua/opcua"
 	"reflect"
 	"testing"
 
 	"github.com/edgexfoundry/device-opcua-go/internal/config"
-	"github.com/edgexfoundry/device-opcua-go/internal/test"
 	sdkModel "github.com/edgexfoundry/device-sdk-go/v2/pkg/models"
 	"github.com/edgexfoundry/go-mod-core-contracts/v2/clients/logger"
 	"github.com/edgexfoundry/go-mod-core-contracts/v2/common"
 	"github.com/edgexfoundry/go-mod-core-contracts/v2/models"
 )
 
-func TestDriver_HandleWriteCommands(t *testing.T) {
-	type args struct {
-		deviceName string
-		protocols  map[string]models.ProtocolProperties
-		reqs       []sdkModel.CommandRequest
-		params     []*sdkModel.CommandValue
-	}
+type args struct {
+	deviceName string
+	protocols  map[string]models.ProtocolProperties
+	reqs       []sdkModel.CommandRequest
+	params     []*sdkModel.CommandValue
+}
+
+var baseProtocol = map[string]models.ProtocolProperties{config.Protocol: {config.Endpoint: Protocol + Address}}
+var intCommandValue = []*sdkModel.CommandValue{{
+	DeviceResourceName: "TestResource1",
+	Type:               common.ValueTypeInt32,
+	Value:              int32(42),
+}}
+
+func TestDriverHandleWriteCommands(t *testing.T) {
+
 	tests := []struct {
-		name    string
-		args    args
-		wantErr bool
+		name          string
+		args          args
+		serviceConfig config.ServiceConfig
+		optionsMock   func() ([]opcua.Option, error)
+		wantErr       bool
 	}{
 		{
 			name: "NOK - no endpoint defined",
 			args: args{
-				deviceName: "Test",
+				deviceName: "TestDevice1",
 				protocols:  map[string]models.ProtocolProperties{config.Protocol: {}},
 				reqs:       []sdkModel.CommandRequest{{DeviceResourceName: "TestVar1"}},
 			},
-			wantErr: true,
+			serviceConfig: config.ServiceConfig{OPCUAServer: config.OPCUAServerConfig{Endpoint: ""}},
+			wantErr:       true,
 		},
 		{
 			name: "NOK - invalid endpoint defined",
 			args: args{
-				deviceName: "Test",
-				protocols:  map[string]models.ProtocolProperties{config.Protocol: {config.Endpoint: test.Protocol + "unknown"}},
+				deviceName: "TestDevice2",
+				protocols:  map[string]models.ProtocolProperties{config.Protocol: {config.Endpoint: Protocol + "unknown"}},
 				reqs:       []sdkModel.CommandRequest{{DeviceResourceName: "TestVar1"}},
 			},
 			wantErr: true,
@@ -51,29 +64,25 @@ func TestDriver_HandleWriteCommands(t *testing.T) {
 		{
 			name: "NOK - invalid node id",
 			args: args{
-				deviceName: "Test",
-				protocols:  map[string]models.ProtocolProperties{config.Protocol: {config.Endpoint: test.Protocol + test.Address}},
+				deviceName: "TestDevice3",
+				protocols:  baseProtocol,
 				reqs: []sdkModel.CommandRequest{{
 					DeviceResourceName: "TestResource1",
-					Attributes:         map[string]interface{}{NODE: "2"},
+					Attributes:         map[string]interface{}{driver.NODE: "2"},
 					Type:               common.ValueTypeInt32,
 				}},
-				params: []*sdkModel.CommandValue{{
-					DeviceResourceName: "TestResource1",
-					Type:               common.ValueTypeInt32,
-					Value:              int32(42),
-				}},
+				params: intCommandValue,
 			},
 			wantErr: true,
 		},
 		{
 			name: "NOK - invalid value",
 			args: args{
-				deviceName: "Test",
-				protocols:  map[string]models.ProtocolProperties{config.Protocol: {config.Endpoint: test.Protocol + test.Address}},
+				deviceName: "TestDevice4",
+				protocols:  baseProtocol,
 				reqs: []sdkModel.CommandRequest{{
 					DeviceResourceName: "TestResource1",
-					Attributes:         map[string]interface{}{NODE: "ns=2;s=rw_int32"},
+					Attributes:         map[string]interface{}{driver.NODE: "ns=2;s=rw_int32"},
 					Type:               common.ValueTypeInt32,
 				}},
 				params: []*sdkModel.CommandValue{{
@@ -82,36 +91,39 @@ func TestDriver_HandleWriteCommands(t *testing.T) {
 					Value:              "foobar",
 				}},
 			},
-			wantErr: true,
+			serviceConfig: config.ServiceConfig{OPCUAServer: config.OPCUAServerConfig{Endpoint: Protocol + Address}},
+			wantErr:       true,
 		},
 		{
 			name: "OK - command request with one parameter",
 			args: args{
-				deviceName: "Test",
-				protocols:  map[string]models.ProtocolProperties{config.Protocol: {config.Endpoint: test.Protocol + test.Address}},
+				deviceName: "TestDevice5",
+				protocols:  baseProtocol,
 				reqs: []sdkModel.CommandRequest{{
 					DeviceResourceName: "TestResource1",
-					Attributes:         map[string]interface{}{NODE: "ns=2;s=rw_int32"},
+					Attributes:         map[string]interface{}{driver.NODE: "ns=2;s=rw_int32"},
 					Type:               common.ValueTypeInt32,
 				}},
-				params: []*sdkModel.CommandValue{{
-					DeviceResourceName: "TestResource1",
-					Type:               common.ValueTypeInt32,
-					Value:              int32(42),
-				}},
+				params: intCommandValue,
 			},
-			wantErr: false,
+			serviceConfig: config.ServiceConfig{OPCUAServer: config.OPCUAServerConfig{Endpoint: Protocol + Address}},
+			wantErr:       false,
 		},
 	}
 
-	server := test.NewServer("../test/opcua_server.py")
-	defer server.Close()
+	server := NewServer("../test/opcua_server.py")
+	defer closeServer(server)
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			d := &Driver{
+			d := &driver.Driver{
 				Logger: &logger.MockLogger{},
 			}
+			driver.ClientOptions = func() ([]opcua.Option, error) {
+				var opts []opcua.Option
+				return opts, nil
+			}
+			d.ServiceConfig = &tt.serviceConfig
 			if err := d.HandleWriteCommands(tt.args.deviceName, tt.args.protocols, tt.args.reqs, tt.args.params); (err != nil) != tt.wantErr {
 				t.Errorf("Driver.HandleWriteCommands() error = %v, wantErr %v", err, tt.wantErr)
 			}
@@ -119,7 +131,7 @@ func TestDriver_HandleWriteCommands(t *testing.T) {
 	}
 }
 
-func Test_newCommandValue(t *testing.T) {
+func TestNewCommandValue(t *testing.T) {
 	type args struct {
 		valueType string
 		param     *sdkModel.CommandValue
@@ -217,7 +229,7 @@ func Test_newCommandValue(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := newCommandValue(tt.args.valueType, tt.args.param)
+			got, err := driver.NewCommandValue(tt.args.valueType, tt.args.param)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("newCommandValue() error = %v, wantErr %v", err, tt.wantErr)
 				return

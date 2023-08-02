@@ -27,14 +27,14 @@ func (d *Driver) HandleWriteCommands(deviceName string, protocols map[string]mod
 
 	d.Logger.Debugf("Driver.HandleWriteCommands: protocols: %v, resource: %v, parameters: %v", protocols, reqs[0].DeviceResourceName, params)
 
-	opts, err := d.createClientOptions()
+	opts, err := ClientOptions()
 	if err != nil {
 		d.Logger.Warnf("Driver.HandleWriteCommands: Failed to create OPCUA client options, %s", err)
 		return err
 	}
 
 	ctx := context.Background()
-	client := opcua.NewClient(d.serviceConfig.OPCUAServer.Endpoint, opts...)
+	client := opcua.NewClient(d.ServiceConfig.OPCUAServer.Endpoint, opts...)
 	if err := client.Connect(ctx); err != nil {
 		d.Logger.Warnf("Driver.HandleWriteCommands: Failed to connect OPCUA client, %s", err)
 		return err
@@ -58,7 +58,7 @@ func (d *Driver) processWriteCommands(client *opcua.Client, reqs []sdkModel.Comm
 
 func (d *Driver) handleWriteCommandRequest(deviceClient *opcua.Client, req sdkModel.CommandRequest,
 	param *sdkModel.CommandValue) error {
-	nodeID, err := getNodeID(req.Attributes, NODE)
+	nodeID, err := GetNodeID(req.Attributes, NODE)
 	if err != nil {
 		return fmt.Errorf("Driver.handleWriteCommands: %v", err)
 	}
@@ -69,7 +69,7 @@ func (d *Driver) handleWriteCommandRequest(deviceClient *opcua.Client, req sdkMo
 		return fmt.Errorf("Driver.handleWriteCommands: Invalid node id=%s", nodeID)
 	}
 
-	value, err := newCommandValue(req.Type, param)
+	value, err := NewCommandValue(req.Type, param)
 	if err != nil {
 		return err
 	}
@@ -101,7 +101,7 @@ func (d *Driver) handleWriteCommandRequest(deviceClient *opcua.Client, req sdkMo
 	return nil
 }
 
-func newCommandValue(valueType string, param *sdkModel.CommandValue) (interface{}, error) {
+func NewCommandValue(valueType string, param *sdkModel.CommandValue) (interface{}, error) {
 	var commandValue interface{}
 	var err error
 	switch valueType {

@@ -4,10 +4,11 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
-package driver
+package test
 
 import (
 	"fmt"
+	"github.com/edgexfoundry/device-opcua-go/internal/driver"
 	"github.com/edgexfoundry/device-sdk-go/v2/pkg/models"
 	"github.com/edgexfoundry/go-mod-core-contracts/v2/common"
 	"github.com/gopcua/opcua/ua"
@@ -74,7 +75,7 @@ func TestTimestamps(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := extractSourceTimestamp(&tt.dataValue)
+			result := driver.ExtractSourceTimestamp(&tt.dataValue)
 			if result != tt.want {
 				t.Errorf("Readhandler.ExtractTimestamps = %v, want %v", result, tt.want)
 				return
@@ -83,14 +84,14 @@ func TestTimestamps(t *testing.T) {
 	}
 }
 
-func TestNewResult_bool(t *testing.T) {
+func TestNewResultBool(t *testing.T) {
 	var reading interface{} = true
 	req := models.CommandRequest{
 		DeviceResourceName: "light",
 		Type:               common.ValueTypeBool,
 	}
 
-	cmdVal, err := newResult(req, reading)
+	cmdVal, err := driver.NewResult(req, reading)
 	if err != nil {
 		t.Fatalf("Fail to create new ReadCommand result, %v", err)
 	}
@@ -100,14 +101,14 @@ func TestNewResult_bool(t *testing.T) {
 	}
 }
 
-func TestNewResult_uint8(t *testing.T) {
+func TestNewResultUint8(t *testing.T) {
 	var reading interface{} = uint8(123)
 	req := models.CommandRequest{
 		DeviceResourceName: "temperature",
 		Type:               common.ValueTypeUint8,
 	}
 
-	cmdVal, err := newResult(req, reading)
+	cmdVal, err := driver.NewResult(req, reading)
 	if err != nil {
 		t.Fatalf("Fail to create new ReadCommand result, %v", err)
 	}
@@ -117,14 +118,14 @@ func TestNewResult_uint8(t *testing.T) {
 	}
 }
 
-func TestNewResult_int8(t *testing.T) {
+func TestNewResultInt8(t *testing.T) {
 	var reading interface{} = int8(123)
 	req := models.CommandRequest{
 		DeviceResourceName: "temperature",
 		Type:               common.ValueTypeInt8,
 	}
 
-	cmdVal, err := newResult(req, reading)
+	cmdVal, err := driver.NewResult(req, reading)
 	if err != nil {
 		t.Fatalf("Fail to create new ReadCommand result, %v", err)
 	}
@@ -134,28 +135,28 @@ func TestNewResult_int8(t *testing.T) {
 	}
 }
 
-func TestNewResultFailed_int8(t *testing.T) {
+func TestNewResultFailedInt8(t *testing.T) {
 	var reading interface{} = int16(256)
 	req := models.CommandRequest{
 		DeviceResourceName: "temperature",
 		Type:               common.ValueTypeInt8,
 	}
 
-	_, err := newResult(req, reading)
+	_, err := driver.NewResult(req, reading)
 	fmt.Println(err)
 	if err == nil || !strings.Contains(err.Error(), "Reading 256 is out of the value type(Int8)'s range") {
 		t.Errorf("Convert new result should be failed")
 	}
 }
 
-func TestNewResult_uint16(t *testing.T) {
+func TestNewResultUint16(t *testing.T) {
 	var reading interface{} = uint16(123)
 	req := models.CommandRequest{
 		DeviceResourceName: "temperature",
 		Type:               common.ValueTypeUint16,
 	}
 
-	cmdVal, err := newResult(req, reading)
+	cmdVal, err := driver.NewResult(req, reading)
 	if err != nil {
 		t.Fatalf("Fail to create new ReadCommand result, %v", err)
 	}
@@ -165,14 +166,14 @@ func TestNewResult_uint16(t *testing.T) {
 	}
 }
 
-func TestNewResult_int16(t *testing.T) {
+func TestNewResultInt16(t *testing.T) {
 	var reading interface{} = int16(123)
 	req := models.CommandRequest{
 		DeviceResourceName: "temperature",
 		Type:               common.ValueTypeInt16,
 	}
 
-	cmdVal, err := newResult(req, reading)
+	cmdVal, err := driver.NewResult(req, reading)
 	if err != nil {
 		t.Fatalf("Fail to create new ReadCommand result, %v", err)
 	}
@@ -182,14 +183,14 @@ func TestNewResult_int16(t *testing.T) {
 	}
 }
 
-func TestNewResult_uint32(t *testing.T) {
+func TestNewResultUint32(t *testing.T) {
 	var reading interface{} = uint32(123)
 	req := models.CommandRequest{
 		DeviceResourceName: "temperature",
 		Type:               common.ValueTypeUint32,
 	}
 
-	cmdVal, err := newResult(req, reading)
+	cmdVal, err := driver.NewResult(req, reading)
 	if err != nil {
 		t.Fatalf("Fail to create new ReadCommand result, %v", err)
 	}
@@ -199,14 +200,14 @@ func TestNewResult_uint32(t *testing.T) {
 	}
 }
 
-func TestNewResult_int32(t *testing.T) {
+func TestNewResultInt32(t *testing.T) {
 	var reading interface{} = int32(123)
 	req := models.CommandRequest{
 		DeviceResourceName: "temperature",
 		Type:               common.ValueTypeInt32,
 	}
 
-	cmdVal, err := newResult(req, reading)
+	cmdVal, err := driver.NewResult(req, reading)
 	if err != nil {
 		t.Fatalf("Fail to create new ReadCommand result, %v", err)
 	}
@@ -216,14 +217,14 @@ func TestNewResult_int32(t *testing.T) {
 	}
 }
 
-func TestNewResult_uint64(t *testing.T) {
+func TestNewResultUint64(t *testing.T) {
 	var reading interface{} = uint64(123)
 	req := models.CommandRequest{
 		DeviceResourceName: "temperature",
 		Type:               common.ValueTypeUint64,
 	}
 
-	cmdVal, err := newResult(req, reading)
+	cmdVal, err := driver.NewResult(req, reading)
 	if err != nil {
 		t.Fatalf("Fail to create new ReadCommand result, %v", err)
 	}
@@ -233,14 +234,14 @@ func TestNewResult_uint64(t *testing.T) {
 	}
 }
 
-func TestNewResult_int64(t *testing.T) {
+func TestNewResultInt64(t *testing.T) {
 	var reading interface{} = int64(123)
 	req := models.CommandRequest{
 		DeviceResourceName: "temperature",
 		Type:               common.ValueTypeInt64,
 	}
 
-	cmdVal, err := newResult(req, reading)
+	cmdVal, err := driver.NewResult(req, reading)
 	if err != nil {
 		t.Fatalf("Fail to create new ReadCommand result, %v", err)
 	}
@@ -250,7 +251,7 @@ func TestNewResult_int64(t *testing.T) {
 	}
 }
 
-func TestNewResult_float32(t *testing.T) {
+func TestNewResultFloat32(t *testing.T) {
 	req := models.CommandRequest{
 		DeviceResourceName: "temperature",
 		Type:               common.ValueTypeFloat32,
@@ -269,7 +270,7 @@ func TestNewResult_float32(t *testing.T) {
 	}
 	for _, testCase := range tests {
 		t.Run(testCase.name, func(t *testing.T) {
-			cmdVal, err := newResult(req, testCase.reading)
+			cmdVal, err := driver.NewResult(req, testCase.reading)
 			require.NoError(t, err)
 			result, err := cmdVal.Float32Value()
 			require.NoError(t, err)
@@ -279,7 +280,7 @@ func TestNewResult_float32(t *testing.T) {
 	}
 }
 
-func TestNewResult_float64(t *testing.T) {
+func TestNewResultFloat64(t *testing.T) {
 	req := models.CommandRequest{
 		DeviceResourceName: "temperature",
 		Type:               common.ValueTypeFloat64,
@@ -298,7 +299,7 @@ func TestNewResult_float64(t *testing.T) {
 	}
 	for _, testCase := range tests {
 		t.Run(testCase.name, func(t *testing.T) {
-			cmdVal, err := newResult(req, testCase.reading)
+			cmdVal, err := driver.NewResult(req, testCase.reading)
 			require.NoError(t, err)
 			result, err := cmdVal.Float64Value()
 			require.NoError(t, err)
@@ -308,14 +309,14 @@ func TestNewResult_float64(t *testing.T) {
 	}
 }
 
-func TestNewResult_float64ToInt8(t *testing.T) {
+func TestNewResultFloat64ToInt8(t *testing.T) {
 	var reading interface{} = float64(123.11)
 	req := models.CommandRequest{
 		DeviceResourceName: "temperature",
 		Type:               common.ValueTypeInt8,
 	}
 
-	cmdVal, err := newResult(req, reading)
+	cmdVal, err := driver.NewResult(req, reading)
 	if err != nil {
 		t.Fatalf("Fail to create new ReadCommand result, %v", err)
 	}
@@ -325,14 +326,14 @@ func TestNewResult_float64ToInt8(t *testing.T) {
 	}
 }
 
-func TestNewResult_float64ToInt16(t *testing.T) {
+func TestNewResultFloat64ToInt16(t *testing.T) {
 	var reading interface{} = float64(123.11)
 	req := models.CommandRequest{
 		DeviceResourceName: "temperature",
 		Type:               common.ValueTypeInt16,
 	}
 
-	cmdVal, err := newResult(req, reading)
+	cmdVal, err := driver.NewResult(req, reading)
 	if err != nil {
 		t.Fatalf("Fail to create new ReadCommand result, %v", err)
 	}
@@ -342,14 +343,14 @@ func TestNewResult_float64ToInt16(t *testing.T) {
 	}
 }
 
-func TestNewResult_float64ToInt32(t *testing.T) {
+func TestNewResultFloat64ToInt32(t *testing.T) {
 	var reading interface{} = float64(123.11)
 	req := models.CommandRequest{
 		DeviceResourceName: "temperature",
 		Type:               common.ValueTypeInt32,
 	}
 
-	cmdVal, err := newResult(req, reading)
+	cmdVal, err := driver.NewResult(req, reading)
 	if err != nil {
 		t.Fatalf("Fail to create new ReadCommand result, %v", err)
 	}
@@ -359,14 +360,14 @@ func TestNewResult_float64ToInt32(t *testing.T) {
 	}
 }
 
-func TestNewResult_float64ToInt64(t *testing.T) {
+func TestNewResultFloat64ToInt64(t *testing.T) {
 	var reading interface{} = float64(123.11)
 	req := models.CommandRequest{
 		DeviceResourceName: "temperature",
 		Type:               common.ValueTypeInt64,
 	}
 
-	cmdVal, err := newResult(req, reading)
+	cmdVal, err := driver.NewResult(req, reading)
 	if err != nil {
 		t.Fatalf("Fail to create new ReadCommand result, %v", err)
 	}
@@ -376,14 +377,14 @@ func TestNewResult_float64ToInt64(t *testing.T) {
 	}
 }
 
-func TestNewResult_float64ToUint8(t *testing.T) {
+func TestNewResultFloat64ToUint8(t *testing.T) {
 	var reading interface{} = float64(123.11)
 	req := models.CommandRequest{
 		DeviceResourceName: "temperature",
 		Type:               common.ValueTypeUint8,
 	}
 
-	cmdVal, err := newResult(req, reading)
+	cmdVal, err := driver.NewResult(req, reading)
 	if err != nil {
 		t.Fatalf("Fail to create new ReadCommand result, %v", err)
 	}
@@ -393,14 +394,14 @@ func TestNewResult_float64ToUint8(t *testing.T) {
 	}
 }
 
-func TestNewResult_float64ToUint16(t *testing.T) {
+func TestNewResultFloat64ToUint16(t *testing.T) {
 	var reading interface{} = float64(123.11)
 	req := models.CommandRequest{
 		DeviceResourceName: "temperature",
 		Type:               common.ValueTypeUint16,
 	}
 
-	cmdVal, err := newResult(req, reading)
+	cmdVal, err := driver.NewResult(req, reading)
 	if err != nil {
 		t.Fatalf("Fail to create new ReadCommand result, %v", err)
 	}
@@ -410,14 +411,14 @@ func TestNewResult_float64ToUint16(t *testing.T) {
 	}
 }
 
-func TestNewResult_float64ToUint32(t *testing.T) {
+func TestNewResultFloat64ToUint32(t *testing.T) {
 	var reading interface{} = float64(123.11)
 	req := models.CommandRequest{
 		DeviceResourceName: "temperature",
 		Type:               common.ValueTypeUint32,
 	}
 
-	cmdVal, err := newResult(req, reading)
+	cmdVal, err := driver.NewResult(req, reading)
 	if err != nil {
 		t.Fatalf("Fail to create new ReadCommand result, %v", err)
 	}
@@ -427,14 +428,14 @@ func TestNewResult_float64ToUint32(t *testing.T) {
 	}
 }
 
-func TestNewResult_float64ToUint64(t *testing.T) {
+func TestNewResultFloat64ToUint64(t *testing.T) {
 	var reading interface{} = float64(123.11)
 	req := models.CommandRequest{
 		DeviceResourceName: "temperature",
 		Type:               common.ValueTypeUint64,
 	}
 
-	cmdVal, err := newResult(req, reading)
+	cmdVal, err := driver.NewResult(req, reading)
 	if err != nil {
 		t.Fatalf("Fail to create new ReadCommand result, %v", err)
 	}
@@ -444,14 +445,14 @@ func TestNewResult_float64ToUint64(t *testing.T) {
 	}
 }
 
-func TestNewResult_float64ToFloat32(t *testing.T) {
+func TestNewResultFloat64ToFloat32(t *testing.T) {
 	var reading interface{} = float64(123.11)
 	req := models.CommandRequest{
 		DeviceResourceName: "temperature",
 		Type:               common.ValueTypeFloat32,
 	}
 
-	cmdVal, err := newResult(req, reading)
+	cmdVal, err := driver.NewResult(req, reading)
 	if err != nil {
 		t.Fatalf("Fail to create new ReadCommand result, %v", err)
 	}
@@ -461,14 +462,14 @@ func TestNewResult_float64ToFloat32(t *testing.T) {
 	}
 }
 
-func TestNewResult_float64ToString(t *testing.T) {
+func TestNewResultFloat64ToString(t *testing.T) {
 	var reading interface{} = float64(123.11)
 	req := models.CommandRequest{
 		DeviceResourceName: "temperature",
 		Type:               common.ValueTypeString,
 	}
 
-	cmdVal, err := newResult(req, reading)
+	cmdVal, err := driver.NewResult(req, reading)
 	if err != nil {
 		t.Fatalf("Fail to create new ReadCommand result, %v", err)
 	}
@@ -478,14 +479,14 @@ func TestNewResult_float64ToString(t *testing.T) {
 	}
 }
 
-func TestNewResult_string(t *testing.T) {
+func TestNewResultString(t *testing.T) {
 	var reading interface{} = "test string"
 	req := models.CommandRequest{
 		DeviceResourceName: "temperature",
 		Type:               common.ValueTypeString,
 	}
 
-	cmdVal, err := newResult(req, reading)
+	cmdVal, err := driver.NewResult(req, reading)
 	if err != nil {
 		t.Fatalf("Fail to create new ReadCommand result, %v", err)
 	}
@@ -495,14 +496,14 @@ func TestNewResult_string(t *testing.T) {
 	}
 }
 
-func TestNewResult_stringToInt64(t *testing.T) {
+func TestNewResultStringToInt64(t *testing.T) {
 	var reading interface{} = "123"
 	req := models.CommandRequest{
 		DeviceResourceName: "temperature",
 		Type:               common.ValueTypeInt64,
 	}
 
-	cmdVal, err := newResult(req, reading)
+	cmdVal, err := driver.NewResult(req, reading)
 	if err != nil {
 		t.Fatalf("Fail to create new ReadCommand result, %v", err)
 	}
@@ -512,14 +513,14 @@ func TestNewResult_stringToInt64(t *testing.T) {
 	}
 }
 
-func TestNewResult_stringToInt8(t *testing.T) {
+func TestNewResultStringToInt8(t *testing.T) {
 	var reading interface{} = "123"
 	req := models.CommandRequest{
 		DeviceResourceName: "temperature",
 		Type:               common.ValueTypeInt8,
 	}
 
-	cmdVal, err := newResult(req, reading)
+	cmdVal, err := driver.NewResult(req, reading)
 	if err != nil {
 		t.Fatalf("Fail to create new ReadCommand result, %v", err)
 	}
@@ -529,14 +530,14 @@ func TestNewResult_stringToInt8(t *testing.T) {
 	}
 }
 
-func TestNewResult_stringToUint8(t *testing.T) {
+func TestNewResultStringToUint8(t *testing.T) {
 	var reading interface{} = "123"
 	req := models.CommandRequest{
 		DeviceResourceName: "temperature",
 		Type:               common.ValueTypeUint8,
 	}
 
-	cmdVal, err := newResult(req, reading)
+	cmdVal, err := driver.NewResult(req, reading)
 	if err != nil {
 		t.Fatalf("Fail to create new ReadCommand result, %v", err)
 	}
@@ -546,14 +547,14 @@ func TestNewResult_stringToUint8(t *testing.T) {
 	}
 }
 
-func TestNewResult_stringToUint32(t *testing.T) {
+func TestNewResultStringToUint32(t *testing.T) {
 	var reading interface{} = "123"
 	req := models.CommandRequest{
 		DeviceResourceName: "temperature",
 		Type:               common.ValueTypeUint32,
 	}
 
-	cmdVal, err := newResult(req, reading)
+	cmdVal, err := driver.NewResult(req, reading)
 	if err != nil {
 		t.Fatalf("Fail to create new ReadCommand result, %v", err)
 	}
@@ -563,14 +564,14 @@ func TestNewResult_stringToUint32(t *testing.T) {
 	}
 }
 
-func TestNewResult_stringToUint64(t *testing.T) {
+func TestNewResultStringToUint64(t *testing.T) {
 	var reading interface{} = "123"
 	req := models.CommandRequest{
 		DeviceResourceName: "temperature",
 		Type:               common.ValueTypeUint64,
 	}
 
-	cmdVal, err := newResult(req, reading)
+	cmdVal, err := driver.NewResult(req, reading)
 	if err != nil {
 		t.Fatalf("Fail to create new ReadCommand result, %v", err)
 	}
@@ -580,14 +581,14 @@ func TestNewResult_stringToUint64(t *testing.T) {
 	}
 }
 
-func TestNewResult_stringToBool(t *testing.T) {
+func TestNewResultStringToBool(t *testing.T) {
 	var reading interface{} = "true"
 	req := models.CommandRequest{
 		DeviceResourceName: "temperature",
 		Type:               common.ValueTypeBool,
 	}
 
-	cmdVal, err := newResult(req, reading)
+	cmdVal, err := driver.NewResult(req, reading)
 	if err != nil {
 		t.Fatalf("Fail to create new ReadCommand result, %v", err)
 	}
@@ -597,14 +598,14 @@ func TestNewResult_stringToBool(t *testing.T) {
 	}
 }
 
-func TestNewResult_numberToUint64(t *testing.T) {
+func TestNewResultNumberToUint64(t *testing.T) {
 	var reading interface{} = 123
 	req := models.CommandRequest{
 		DeviceResourceName: "temperature",
 		Type:               common.ValueTypeUint64,
 	}
 
-	cmdVal, err := newResult(req, reading)
+	cmdVal, err := driver.NewResult(req, reading)
 	if err != nil {
 		t.Fatalf("Fail to create new ReadCommand result, %v", err)
 	}
@@ -614,14 +615,14 @@ func TestNewResult_numberToUint64(t *testing.T) {
 	}
 }
 
-func TestNewResult_floatNumberToFloat32(t *testing.T) {
+func TestNewResultFloatNumberToFloat32(t *testing.T) {
 	var reading interface{} = 123.0
 	req := models.CommandRequest{
 		DeviceResourceName: "temperature",
 		Type:               common.ValueTypeFloat32,
 	}
 
-	cmdVal, err := newResult(req, reading)
+	cmdVal, err := driver.NewResult(req, reading)
 	if err != nil {
 		t.Fatalf("Fail to create new ReadCommand result, %v", err)
 	}
@@ -631,14 +632,14 @@ func TestNewResult_floatNumberToFloat32(t *testing.T) {
 	}
 }
 
-func TestNewResult_numberToString(t *testing.T) {
+func TestNewResultNumberToString(t *testing.T) {
 	var reading interface{} = 123
 	req := models.CommandRequest{
 		DeviceResourceName: "temperature",
 		Type:               common.ValueTypeString,
 	}
 
-	cmdVal, err := newResult(req, reading)
+	cmdVal, err := driver.NewResult(req, reading)
 	if err != nil {
 		t.Fatalf("Fail to create new ReadCommand result, %v", err)
 	}
