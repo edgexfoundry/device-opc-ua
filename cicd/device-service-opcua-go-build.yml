@@ -1,0 +1,41 @@
+name: $(majorMinorVersion).$(patchVersion)$(extension)
+
+trigger:
+  - main
+  - develop
+
+pr:
+  - main
+  - develop
+  - feature/*
+
+resources:
+  repositories:
+    - repository: azure-pipeline-template
+      type: git
+      name: bOne-infrastructure/azure-pipeline-template
+      ref: refs/tags/1.0.2
+
+variables:
+  - template: vars/variables.yml@azure-pipeline-template
+  - template: vars/variables.yml
+  - group: SonarcloudVariables
+
+stages:
+  - stage: Build
+    displayName: Build and test
+    jobs:
+      - job: Build
+        displayName: Build and test
+        pool:
+          vmImage: $(osimage)
+        steps:
+          - template: ./pull_request_pipeline.yml
+  - stage: Deploy
+    displayName: Build and deploy image
+    jobs:
+      - template: jobs/build-and-push-to-docker-acr.yml@azure-pipeline-template
+  - stage: Tag
+    displayName: Tag on success
+    jobs:
+      - template: jobs/checkout-git-tag-on-main-branch.yml@azure-pipeline-template
