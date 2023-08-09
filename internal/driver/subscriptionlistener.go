@@ -22,6 +22,7 @@ import (
 
 var LastClientState opcua.ConnState
 var ActualClientState opcua.ConnState
+var subCanceled bool
 var basicErrorMessage = "[Incoming listener] unable to get running device service"
 
 func (d *Driver) StartSubscriptionListener() error {
@@ -41,7 +42,7 @@ func (d *Driver) StartSubscriptionListener() error {
 	ctxBg := context.Background()
 	ctx, cancel := context.WithCancel(ctxBg)
 	d.CtxCancel = cancel
-
+	subCanceled = false
 	ds := service.RunningService()
 	if ds == nil {
 		return fmt.Errorf(basicErrorMessage)
@@ -128,6 +129,9 @@ func CloseClientConnection(d *Driver, client ClientCloser) error {
 // CancelSubscription cancel the subscription
 func CancelSubscription(d *Driver, cancel SubscriptionCanceller, ctx context.Context) error {
 	err := cancel.Cancel(ctx)
+	subCanceled = true
+	LastClientState = opcua.Closed
+	ActualClientState = opcua.Closed
 	if err != nil {
 		d.Logger.Warnf("[Incoming listener] Failed to cancel subscription., %s", err)
 	}
@@ -141,6 +145,12 @@ func InitCheckClientState(d *Driver, client ClientState) {
 	LastClientState = opcua.Closed
 	ActualClientState = opcua.Closed
 	for {
+		// break this routine if subscription was canceled
+		if subCanceled {
+			d.Logger.Infof("Break connection state checking because subscription was cancelled.")
+			break
+		}
+
 		// separated into a function for better testability
 		HandleCurrentClientState(d, client)
 		// use configured interval
