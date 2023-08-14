@@ -77,7 +77,7 @@ func (d *Driver) StartSubscriptionListener() error {
 	// begin continuous client state check
 	go InitCheckClientState(d, client)
 
-	if err = d.configureMonitoredItems(sub, resources, deviceName); err != nil {
+	if err = d.ConfigureMonitoredItems(sub, resources, deviceName); err != nil {
 		return err
 	}
 
@@ -187,7 +187,7 @@ func (d *Driver) GetClient(device models.Device) (*opcua.Client, error) {
 	return opcua.NewClient(d.ServiceConfig.OPCUAServer.Endpoint, opts...), nil
 }
 
-func (d *Driver) configureMonitoredItems(sub *opcua.Subscription, resources, deviceName string) error {
+func (d *Driver) ConfigureMonitoredItems(sub *opcua.Subscription, resources, deviceName string) error {
 	d.Logger.Infof("[Incoming listener] Start configuring for resources.", resources)
 	ds := service.RunningService()
 	if ds == nil {
@@ -200,7 +200,9 @@ func (d *Driver) configureMonitoredItems(sub *opcua.Subscription, resources, dev
 	for i, node := range strings.Split(resources, ",") {
 		deviceResource, ok := ds.DeviceResource(deviceName, node)
 		if !ok {
-			return fmt.Errorf("[Incoming listener] Unable to find device resource with name %s", node)
+			// If a resource is not found, skip it so subscriptions for the other resources can run.
+			d.Logger.Infof("[Incoming listener] Unable to find device resource with name %s. Please check the device profile.", node)
+			continue
 		}
 
 		opcuaNodeID, err := GetNodeID(deviceResource.Attributes, NODE)
