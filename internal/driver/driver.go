@@ -29,6 +29,7 @@ import (
 	"github.com/gopcua/opcua/ua"
 	"log"
 	"math/big"
+	"net/url"
 	"os"
 	"strconv"
 	"sync"
@@ -67,7 +68,9 @@ func startupSubscriptionListener(d *Driver) {
 		time.Sleep(5 * time.Second)
 	}
 }
-func createX509Template() x509.Certificate {
+func createX509Template() (x509.Certificate, error) {
+	uri, err := url.Parse(driver.ServiceConfig.OPCUAServer.CertificateConfig.CertCommonName)
+	uris := []*url.URL{uri}
 	template := x509.Certificate{
 		SerialNumber: big.NewInt(2023),
 		Subject: pkix.Name{
@@ -76,11 +79,12 @@ func createX509Template() x509.Certificate {
 			Province:     []string{driver.ServiceConfig.OPCUAServer.CertificateConfig.CertProvince},
 			Locality:     []string{driver.ServiceConfig.OPCUAServer.CertificateConfig.CertLocality},
 		},
+		URIs:                  uris,
 		NotBefore:             time.Now(),
 		NotAfter:              time.Now().AddDate(10, 0, 0),
 		BasicConstraintsValid: true,
 	}
-	return template
+	return template, err
 }
 
 // Initialize performs protocol-specific initialization for the device service
@@ -189,7 +193,11 @@ func readClientCertAndPrivateKey(clientCertFileName, clientKeyFileName string) (
 	return clientCertificate, privateKey, nil
 }
 func createSelfSignedClientCertificates(clientName string) ([]byte, []byte, error) {
-	template := createX509Template()
+	template, err := createX509Template()
+	if err != nil {
+		log.Fatal(err)
+	}
+
 	clientPrivateKey, err := rsa.GenerateKey(rand.Reader, driver.ServiceConfig.OPCUAServer.CertificateConfig.CertBits)
 	if err != nil {
 		log.Fatal(err)
@@ -211,8 +219,8 @@ func createSelfSignedClientCertificates(clientName string) ([]byte, []byte, erro
 func setClientTemplateOptions(template x509.Certificate, commonName string) x509.Certificate {
 	template.Subject.CommonName = commonName
 	template.IsCA = false
-	template.KeyUsage = x509.KeyUsageKeyEncipherment | x509.KeyUsageDigitalSignature
-	template.ExtKeyUsage = []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth}
+	template.KeyUsage = x509.KeyUsageKeyEncipherment | x509.KeyUsageDigitalSignature | x509.KeyUsageDataEncipherment | x509.KeyUsageContentCommitment | x509.KeyUsageCertSign
+	template.ExtKeyUsage = []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth, x509.ExtKeyUsageServerAuth}
 
 	return template
 }

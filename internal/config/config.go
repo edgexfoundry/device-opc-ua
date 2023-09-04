@@ -55,6 +55,7 @@ type CertificateConfiguration struct {
 	CertCountry         string
 	CertProvince        string
 	CertLocality        string
+	CertCommonName      string
 	CertBits            int
 	CertFilePermissions string
 	KeyFile             string

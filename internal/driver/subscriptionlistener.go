@@ -22,6 +22,7 @@ import (
 
 var LastClientState opcua.ConnState
 var ActualClientState opcua.ConnState
+var subCanceled bool
 var basicErrorMessage = "[Incoming listener] unable to get running device service"
 
 func (d *Driver) StartSubscriptionListener() error {
@@ -41,7 +42,7 @@ func (d *Driver) StartSubscriptionListener() error {
 	ctxBg := context.Background()
 	ctx, cancel := context.WithCancel(ctxBg)
 	d.CtxCancel = cancel
-
+	subCanceled = false
 	ds := service.RunningService()
 	if ds == nil {
 		return fmt.Errorf(basicErrorMessage)
@@ -76,7 +77,7 @@ func (d *Driver) StartSubscriptionListener() error {
 	// begin continuous client state check
 	go InitCheckClientState(d, client)
 
-	if err = d.configureMonitoredItems(sub, resources, deviceName); err != nil {
+	if err = d.ConfigureMonitoredItems(sub, resources, deviceName); err != nil {
 		return err
 	}
 
@@ -128,6 +129,9 @@ func CloseClientConnection(d *Driver, client ClientCloser) error {
 // CancelSubscription cancel the subscription
 func CancelSubscription(d *Driver, cancel SubscriptionCanceller, ctx context.Context) error {
 	err := cancel.Cancel(ctx)
+	subCanceled = true
+	LastClientState = opcua.Closed
+	ActualClientState = opcua.Closed
 	if err != nil {
 		d.Logger.Warnf("[Incoming listener] Failed to cancel subscription., %s", err)
 	}
@@ -141,6 +145,12 @@ func InitCheckClientState(d *Driver, client ClientState) {
 	LastClientState = opcua.Closed
 	ActualClientState = opcua.Closed
 	for {
+		// break this routine if subscription was canceled
+		if subCanceled {
+			d.Logger.Infof("Break connection state checking because subscription was cancelled.")
+			break
+		}
+
 		// separated into a function for better testability
 		HandleCurrentClientState(d, client)
 		// use configured interval
@@ -177,7 +187,7 @@ func (d *Driver) GetClient(device models.Device) (*opcua.Client, error) {
 	return opcua.NewClient(d.ServiceConfig.OPCUAServer.Endpoint, opts...), nil
 }
 
-func (d *Driver) configureMonitoredItems(sub *opcua.Subscription, resources, deviceName string) error {
+func (d *Driver) ConfigureMonitoredItems(sub *opcua.Subscription, resources, deviceName string) error {
 	d.Logger.Infof("[Incoming listener] Start configuring for resources.", resources)
 	ds := service.RunningService()
 	if ds == nil {
@@ -190,7 +200,9 @@ func (d *Driver) configureMonitoredItems(sub *opcua.Subscription, resources, dev
 	for i, node := range strings.Split(resources, ",") {
 		deviceResource, ok := ds.DeviceResource(deviceName, node)
 		if !ok {
-			return fmt.Errorf("[Incoming listener] Unable to find device resource with name %s", node)
+			// If a resource is not found, skip it so subscriptions for the other resources can run.
+			d.Logger.Infof("[Incoming listener] Unable to find device resource with name %s. Please check the device profile.", node)
+			continue
 		}
 
 		opcuaNodeID, err := GetNodeID(deviceResource.Attributes, NODE)

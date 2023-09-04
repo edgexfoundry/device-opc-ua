@@ -2,7 +2,7 @@ variables:
   - group: git-hub-user
   # Update version corresponding to our updates
   - name: majorMinorVersion
-    value: 1.0.1
+    value: 1.0.2
 
   # overwrite the default value, we do not want to use the "buildnumber" inside the tag
   - name: gitTagValue
