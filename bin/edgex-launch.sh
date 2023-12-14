@@ -1,7 +1,7 @@
 #!/bin/bash
 #
-# Copyright (c) 2018
-# Mainflux
+# Copyright (c) 2018 Mainflux
+# Copyright (C) 2023 YIQISOFT
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -21,7 +21,7 @@ function cleanup {
 }
 
 cd $CMD
-exec -a edgex-device-opcua ./device-opcua &
+exec -a edgex-device-opcua ./device-opcua -cp -d -o&
 cd $DIR
 
 

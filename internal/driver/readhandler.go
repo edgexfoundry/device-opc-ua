@@ -3,6 +3,7 @@
 // Copyright (C) 2018 Canonical Ltd
 // Copyright (C) 2018 IOTech Ltd
 // Copyright (C) 2021 Schneider Electric
+// Copyright (C) 2023 YIQISOFT
 //
 // SPDX-License-Identifier: Apache-2.0
 
@@ -12,9 +13,8 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/edgexfoundry/device-opcua-go/internal/config"
-	sdkModel "github.com/edgexfoundry/device-sdk-go/v2/pkg/models"
-	"github.com/edgexfoundry/go-mod-core-contracts/v2/models"
+	sdkModel "github.com/edgexfoundry/device-sdk-go/v3/pkg/models"
+	"github.com/edgexfoundry/go-mod-core-contracts/v3/models"
 	"github.com/gopcua/opcua"
 	"github.com/gopcua/opcua/ua"
 )
@@ -26,18 +26,18 @@ func (d *Driver) HandleReadCommands(deviceName string, protocols map[string]mode
 	d.Logger.Debugf("Driver.HandleReadCommands: protocols: %v resource: %v attributes: %v", protocols, reqs[0].DeviceResourceName, reqs[0].Attributes)
 
 	// create device client and open connection
-	endpoint, err := config.FetchEndpoint(protocols)
+	endpoint, err := FetchEndpoint(protocols)
 	if err != nil {
 		return nil, err
 	}
 	ctx := context.Background()
 
-	client := opcua.NewClient(endpoint, opcua.SecurityMode(ua.MessageSecurityModeNone))
+	client, _ := opcua.NewClient(endpoint, opcua.SecurityMode(ua.MessageSecurityModeNone))
 	if err := client.Connect(ctx); err != nil {
 		d.Logger.Warnf("Driver.HandleReadCommands: Failed to connect OPCUA client, %s", err)
 		return nil, err
 	}
-	defer client.Close()
+	defer client.Close(ctx)
 
 	return d.processReadCommands(client, reqs)
 }
@@ -93,7 +93,9 @@ func makeReadRequest(deviceClient *opcua.Client, req sdkModel.CommandRequest) (*
 		},
 		TimestampsToReturn: ua.TimestampsToReturnBoth,
 	}
-	resp, err := deviceClient.Read(request)
+
+	ctx := context.Background()
+	resp, err := deviceClient.Read(ctx, request)
 	if err != nil {
 		return nil, fmt.Errorf("Driver.handleReadCommands: Read failed: %s", err)
 	}
@@ -144,7 +146,8 @@ func makeMethodCall(deviceClient *opcua.Client, req sdkModel.CommandRequest) (*s
 		InputArguments: inputs,
 	}
 
-	resp, err := deviceClient.Call(request)
+	ctx := context.Background()
+	resp, err := deviceClient.Call(ctx, request)
 	if err != nil {
 		return nil, fmt.Errorf("Driver.handleReadCommands: Method call failed: %s", err)
 	}

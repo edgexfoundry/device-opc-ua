@@ -1,6 +1,7 @@
 // -*- Mode: Go; indent-tabs-mode: t -*-
 //
 // Copyright (C) 2019 IOTech Ltd
+// Copyright (C) 2023 YIQISOFT
 //
 // SPDX-License-Identifier: Apache-2.0
 
@@ -11,8 +12,8 @@ import (
 	"math"
 	"time"
 
-	sdkModel "github.com/edgexfoundry/device-sdk-go/v2/pkg/models"
-	"github.com/edgexfoundry/go-mod-core-contracts/v2/common"
+	sdkModel "github.com/edgexfoundry/device-sdk-go/v3/pkg/models"
+	"github.com/edgexfoundry/go-mod-core-contracts/v3/common"
 	"github.com/spf13/cast"
 )
 

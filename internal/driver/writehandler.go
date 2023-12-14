@@ -3,6 +3,7 @@
 // Copyright (C) 2018 Canonical Ltd
 // Copyright (C) 2018 IOTech Ltd
 // Copyright (C) 2021 Schneider Electric
+// Copyright (C) 2023 YIQISOFT
 //
 // SPDX-License-Identifier: Apache-2.0
 
@@ -12,10 +13,9 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/edgexfoundry/device-opcua-go/internal/config"
-	sdkModel "github.com/edgexfoundry/device-sdk-go/v2/pkg/models"
-	"github.com/edgexfoundry/go-mod-core-contracts/v2/common"
-	"github.com/edgexfoundry/go-mod-core-contracts/v2/models"
+	sdkModel "github.com/edgexfoundry/device-sdk-go/v3/pkg/models"
+	"github.com/edgexfoundry/go-mod-core-contracts/v3/common"
+	"github.com/edgexfoundry/go-mod-core-contracts/v3/models"
 	"github.com/gopcua/opcua"
 	"github.com/gopcua/opcua/ua"
 )
@@ -31,18 +31,18 @@ func (d *Driver) HandleWriteCommands(deviceName string, protocols map[string]mod
 	var err error
 
 	// create device client and open connection
-	endpoint, err := config.FetchEndpoint(protocols)
+	endpoint, err := FetchEndpoint(protocols)
 	if err != nil {
 		return err
 	}
 
 	ctx := context.Background()
-	client := opcua.NewClient(endpoint, opcua.SecurityMode(ua.MessageSecurityModeNone))
+	client, _ := opcua.NewClient(endpoint, opcua.SecurityMode(ua.MessageSecurityModeNone))
 	if err := client.Connect(ctx); err != nil {
 		d.Logger.Warnf("Driver.HandleWriteCommands: Failed to connect OPCUA client, %s", err)
 		return err
 	}
-	defer client.Close()
+	defer client.Close(ctx)
 
 	return d.processWriteCommands(client, reqs, params)
 }
@@ -95,7 +95,8 @@ func (d *Driver) handleWriteCommandRequest(deviceClient *opcua.Client, req sdkMo
 		},
 	}
 
-	resp, err := deviceClient.Write(request)
+	ctx := context.Background()
+	resp, err := deviceClient.Write(ctx, request)
 	if err != nil {
 		d.Logger.Errorf("Driver.handleWriteCommands: Write value %v failed: %s", v, err)
 		return err

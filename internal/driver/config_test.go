@@ -1,15 +1,16 @@
 // -*- Mode: Go; indent-tabs-mode: t -*-
 //
 // Copyright (C) 2021 Schneider Electric
+// Copyright (C) 2023 YIQISOFT
 //
 // SPDX-License-Identifier: Apache-2.0
 
-package config
+package driver
 
 import (
 	"testing"
 
-	"github.com/edgexfoundry/go-mod-core-contracts/v2/models"
+	"github.com/edgexfoundry/go-mod-core-contracts/v3/models"
 )
 
 func TestOPCUAServerConfig_Validate(t *testing.T) {

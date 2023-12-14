@@ -1,6 +1,7 @@
 // -*- Mode: Go; indent-tabs-mode: t -*-
 //
 // Copyright (C) 2021 Schneider Electric
+// Copyright (C) 2023 YIQISOFT
 //
 // SPDX-License-Identifier: Apache-2.0
 
@@ -10,10 +11,8 @@ import (
 	"context"
 	"testing"
 
-	"github.com/edgexfoundry/device-opcua-go/internal/config"
-	sdkModel "github.com/edgexfoundry/device-sdk-go/v2/pkg/models"
-	"github.com/edgexfoundry/go-mod-core-contracts/v2/clients/logger"
-	"github.com/edgexfoundry/go-mod-core-contracts/v2/models"
+	"github.com/edgexfoundry/go-mod-core-contracts/v3/clients/logger"
+	"github.com/edgexfoundry/go-mod-core-contracts/v3/models"
 )
 
 func TestDriver_updateWritableConfig(t *testing.T) {
@@ -30,14 +29,14 @@ func TestDriver_updateWritableConfig(t *testing.T) {
 		},
 		{
 			name: "OK - good configuration",
-			args: args{rawWritableConfig: &config.WritableInfo{}},
+			args: args{rawWritableConfig: &WritableInfo{}},
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			d := &Driver{
 				Logger:        &logger.MockLogger{},
-				serviceConfig: &config.ServiceConfig{},
+				serviceConfig: &ServiceConfig{},
 			}
 			d.updateWritableConfig(tt.args.rawWritableConfig)
 		})
@@ -65,7 +64,7 @@ func TestDriver_AddDevice(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			d := NewProtocolDriver().(*Driver)
 			d.Logger = &logger.MockLogger{}
-			d.serviceConfig = &config.ServiceConfig{OPCUAServer: config.OPCUAServerConfig{DeviceName: tt.args.deviceName}}
+			d.serviceConfig = &ServiceConfig{OPCUAServer: OPCUAServerConfig{DeviceName: tt.args.deviceName}}
 			if err := d.AddDevice(tt.args.deviceName, tt.args.protocols, tt.args.adminState); (err != nil) != tt.wantErr {
 				t.Errorf("Driver.AddDevice() error = %v, wantErr %v", err, tt.wantErr)
 			}
@@ -201,7 +200,7 @@ func Test_getNodeID(t *testing.T) {
 func TestDriver_Initialize(t *testing.T) {
 	t.Run("initialize", func(t *testing.T) {
 		d := NewProtocolDriver()
-		err := d.Initialize(&logger.MockLogger{}, make(chan<- *sdkModel.AsyncValues), make(chan<- []sdkModel.DiscoveredDevice))
+		err := d.Initialize(driver.sdkService)
 		if err == nil {
 			t.Errorf("expected error to be returned in test environment")
 		}

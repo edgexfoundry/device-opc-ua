@@ -1,6 +1,7 @@
 // -*- Mode: Go; indent-tabs-mode: t -*-
 //
 // Copyright (C) 2021 Schneider Electric
+// Copyright (C) 2023 YIQISOFT
 //
 // SPDX-License-Identifier: Apache-2.0
 
@@ -23,4 +24,11 @@ const (
 	METHOD = "methodId"
 	// INPUTMAP attribute
 	INPUTMAP = "inputMap"
+)
+
+const (
+	// Protocol is the supported device protocol
+	Protocol = "opcua"
+	// Endpoint is a constant string
+	Endpoint = "Endpoint"
 )
