@@ -1,6 +1,7 @@
 // -*- Mode: Go; indent-tabs-mode: t -*-
 //
 // Copyright (C) 2021 Schneider Electric
+// Copyright (C) 2023 YIQISOFT
 //
 // SPDX-License-Identifier: Apache-2.0
 
@@ -10,12 +11,11 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/edgexfoundry/device-opcua-go/internal/config"
 	"github.com/edgexfoundry/device-opcua-go/internal/test"
-	sdkModel "github.com/edgexfoundry/device-sdk-go/v2/pkg/models"
-	"github.com/edgexfoundry/go-mod-core-contracts/v2/clients/logger"
-	"github.com/edgexfoundry/go-mod-core-contracts/v2/common"
-	"github.com/edgexfoundry/go-mod-core-contracts/v2/models"
+	sdkModel "github.com/edgexfoundry/device-sdk-go/v3/pkg/models"
+	"github.com/edgexfoundry/go-mod-core-contracts/v3/clients/logger"
+	"github.com/edgexfoundry/go-mod-core-contracts/v3/common"
+	"github.com/edgexfoundry/go-mod-core-contracts/v3/models"
 )
 
 func TestDriver_HandleWriteCommands(t *testing.T) {
@@ -34,7 +34,7 @@ func TestDriver_HandleWriteCommands(t *testing.T) {
 			name: "NOK - no endpoint defined",
 			args: args{
 				deviceName: "Test",
-				protocols:  map[string]models.ProtocolProperties{config.Protocol: {}},
+				protocols:  map[string]models.ProtocolProperties{Protocol: {}},
 				reqs:       []sdkModel.CommandRequest{{DeviceResourceName: "TestVar1"}},
 			},
 			wantErr: true,
@@ -43,7 +43,7 @@ func TestDriver_HandleWriteCommands(t *testing.T) {
 			name: "NOK - invalid endpoint defined",
 			args: args{
 				deviceName: "Test",
-				protocols:  map[string]models.ProtocolProperties{config.Protocol: {config.Endpoint: test.Protocol + "unknown"}},
+				protocols:  map[string]models.ProtocolProperties{Protocol: {Endpoint: test.Protocol + "unknown"}},
 				reqs:       []sdkModel.CommandRequest{{DeviceResourceName: "TestVar1"}},
 			},
 			wantErr: true,
@@ -52,7 +52,7 @@ func TestDriver_HandleWriteCommands(t *testing.T) {
 			name: "NOK - invalid node id",
 			args: args{
 				deviceName: "Test",
-				protocols:  map[string]models.ProtocolProperties{config.Protocol: {config.Endpoint: test.Protocol + test.Address}},
+				protocols:  map[string]models.ProtocolProperties{Protocol: {Endpoint: test.Protocol + test.Address}},
 				reqs: []sdkModel.CommandRequest{{
 					DeviceResourceName: "TestResource1",
 					Attributes:         map[string]interface{}{NODE: "2"},
@@ -70,7 +70,7 @@ func TestDriver_HandleWriteCommands(t *testing.T) {
 			name: "NOK - invalid value",
 			args: args{
 				deviceName: "Test",
-				protocols:  map[string]models.ProtocolProperties{config.Protocol: {config.Endpoint: test.Protocol + test.Address}},
+				protocols:  map[string]models.ProtocolProperties{Protocol: {Endpoint: test.Protocol + test.Address}},
 				reqs: []sdkModel.CommandRequest{{
 					DeviceResourceName: "TestResource1",
 					Attributes:         map[string]interface{}{NODE: "ns=2;s=rw_int32"},
@@ -88,7 +88,7 @@ func TestDriver_HandleWriteCommands(t *testing.T) {
 			name: "OK - command request with one parameter",
 			args: args{
 				deviceName: "Test",
-				protocols:  map[string]models.ProtocolProperties{config.Protocol: {config.Endpoint: test.Protocol + test.Address}},
+				protocols:  map[string]models.ProtocolProperties{Protocol: {Endpoint: test.Protocol + test.Address}},
 				reqs: []sdkModel.CommandRequest{{
 					DeviceResourceName: "TestResource1",
 					Attributes:         map[string]interface{}{NODE: "ns=2;s=rw_int32"},

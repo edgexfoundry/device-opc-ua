@@ -1,44 +1,48 @@
-name: "OPCUA-Server"
-manufacturer: "Prosys"
-model: "S1"
+name: OPCUA-Server
+manufacturer: Prosys
+model: Simlulator
 labels:
-  - "OPCUA"
-  - "test"
-description: "Simulation results of OPCUA Server"
+  - OPCUA
+  - TEST
+description: Simulation OPCUA Server
 deviceResources:
-  -
-    name: "Counter"
-    description: "generated counter number"
+  - name: Constant
+    description: generated constant number
     properties:
-      valueType: "Int32"
-      readWrite: "R"
-      defaultValue: "0"
-      minimum: "0"
-      maximum: "30"
+      valueType: Float64
+      readWrite: RW
     attributes:
-      { nodeId: "ns=3;i=1001" }
-  -
-    name: "Random"
-    description: "generated random number"
+      nodeId: ns=3;i=1001
+  - name: Counter
+    description: generated counter number
     properties:
-      valueType: "Float64"
-      readWrite: "R"
-      defaultValue: "0.0"
-      minimum: "-2.0"
-      maximum: "2.0"
+      valueType: Int32
+      readWrite: R
     attributes:
-      { nodeId: "ns=3;i=1002" }
-
+      nodeId: ns=3;i=1002
+  - name: Random
+    description: generated random number
+    properties:
+      valueType: Float64
+      readWrite: R
+    attributes:
+      nodeId: ns=3;i=1003
 deviceCommands:
-  -
-    name: "CounterNum"
+  - name: ConstantNum
     isHidden: false
-    readWrite: "R"
+    readWrite: RW
     resourceOperations:
-      - { deviceResource: "Counter", defaultValue: "0" }
-  -
-    name: "RandomNum"
+      - deviceResource: Constant
+        defaultValue: 0.0
+  - name: CounterNum
     isHidden: false
-    readWrite: "R"
+    readWrite: R
     resourceOperations:
-      - { deviceResource: "Random", defaultValue: "0.0" }
+      - deviceResource: Counter
+        defaultValue: 0
+  - name: RandomNum
+    isHidden: false
+    readWrite: R
+    resourceOperations:
+      - deviceResource: Random
+        defaultValue: 0.0

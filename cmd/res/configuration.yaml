@@ -1,0 +1,20 @@
+Writable:
+  LogLevel: INFO
+
+Service:
+  Host: localhost
+  Port: 59997
+  StartupMsg: 'opcua device service started'
+
+Device:
+  DevicesDir: ./res/devices
+  ProfilesDir: ./res/profiles
+
+OPCUAServer:
+  DeviceName: SimulationServer
+  Policy: None
+  Mode: None
+  CertFile: ''
+  KeyFile: ''
+  Writable:
+    Resources: 'Counter,Random'

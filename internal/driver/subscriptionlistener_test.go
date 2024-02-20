@@ -1,6 +1,7 @@
 // -*- Mode: Go; indent-tabs-mode: t -*-
 //
 // Copyright (C) 2021 Schneider Electric
+// Copyright (C) 2023 YIQISOFT
 //
 // SPDX-License-Identifier: Apache-2.0
 
@@ -9,8 +10,7 @@ package driver
 import (
 	"testing"
 
-	"github.com/edgexfoundry/device-opcua-go/internal/config"
-	"github.com/edgexfoundry/go-mod-core-contracts/v2/models"
+	"github.com/edgexfoundry/go-mod-core-contracts/v3/models"
 	"github.com/gopcua/opcua"
 	"github.com/gopcua/opcua/ua"
 )
@@ -18,7 +18,7 @@ import (
 func Test_startSubscriptionListener(t *testing.T) {
 	t.Run("create context and exit", func(t *testing.T) {
 		d := NewProtocolDriver().(*Driver)
-		d.serviceConfig = &config.ServiceConfig{}
+		d.serviceConfig = &ServiceConfig{}
 		d.serviceConfig.OPCUAServer.Writable.Resources = "IntVarTest1"
 
 		err := d.startSubscriptionListener()
@@ -33,7 +33,7 @@ func Test_startSubscriptionListener(t *testing.T) {
 func Test_onIncomingDataListener(t *testing.T) {
 	t.Run("set reading and exit", func(t *testing.T) {
 		d := NewProtocolDriver().(*Driver)
-		d.serviceConfig = &config.ServiceConfig{}
+		d.serviceConfig = &ServiceConfig{}
 		d.serviceConfig.OPCUAServer.DeviceName = "Test"
 
 		err := d.onIncomingDataReceived("42", "TestResource")
@@ -46,14 +46,14 @@ func Test_onIncomingDataListener(t *testing.T) {
 func TestDriver_getClient(t *testing.T) {
 	tests := []struct {
 		name          string
-		serviceConfig *config.ServiceConfig
+		serviceConfig *ServiceConfig
 		device        models.Device
 		want          *opcua.Client
 		wantErr       bool
 	}{
 		{
 			name:          "NOK - no endpoint configured",
-			serviceConfig: &config.ServiceConfig{OPCUAServer: config.OPCUAServerConfig{}},
+			serviceConfig: &ServiceConfig{OPCUAServer: OPCUAServerConfig{}},
 			device: models.Device{
 				Protocols: make(map[string]models.ProtocolProperties),
 			},
@@ -61,7 +61,7 @@ func TestDriver_getClient(t *testing.T) {
 		},
 		{
 			name:          "NOK - no server connection",
-			serviceConfig: &config.ServiceConfig{OPCUAServer: config.OPCUAServerConfig{}},
+			serviceConfig: &ServiceConfig{OPCUAServer: OPCUAServerConfig{}},
 			device: models.Device{
 				Protocols: map[string]models.ProtocolProperties{
 					"opcua": {"Endpoint": "opc.tcp://test"},
@@ -73,7 +73,7 @@ func TestDriver_getClient(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			d := NewProtocolDriver().(*Driver)
-			d.serviceConfig = &config.ServiceConfig{}
+			d.serviceConfig = &ServiceConfig{}
 			_, err := d.getClient(tt.device)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("Driver.getClient() error = %v, wantErr %v", err, tt.wantErr)
@@ -106,7 +106,7 @@ func TestDriver_handleDataChange(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			d := NewProtocolDriver().(*Driver)
-			d.serviceConfig = &config.ServiceConfig{}
+			d.serviceConfig = &ServiceConfig{}
 			d.handleDataChange(tt.dcn)
 		})
 	}

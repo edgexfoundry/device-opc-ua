@@ -3,6 +3,7 @@
 // Copyright (C) 2018 Canonical Ltd
 // Copyright (C) 2018 IOTech Ltd
 // Copyright (C) 2021 Schneider Electric
+// Copyright (C) 2023 YIQISOFT
 //
 // SPDX-License-Identifier: Apache-2.0
 
@@ -14,10 +15,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/edgexfoundry/device-opcua-go/internal/config"
-	sdkModels "github.com/edgexfoundry/device-sdk-go/v2/pkg/models"
-	"github.com/edgexfoundry/device-sdk-go/v2/pkg/service"
-	"github.com/edgexfoundry/go-mod-core-contracts/v2/models"
+	sdkModels "github.com/edgexfoundry/device-sdk-go/v3/pkg/models"
+	"github.com/edgexfoundry/go-mod-core-contracts/v3/models"
 	"github.com/gopcua/opcua"
 	"github.com/gopcua/opcua/ua"
 )
@@ -40,12 +39,7 @@ func (d *Driver) startSubscriptionListener() error {
 	ctx, cancel := context.WithCancel(ctxBg)
 	d.ctxCancel = cancel
 
-	ds := service.RunningService()
-	if ds == nil {
-		return fmt.Errorf("[Incoming listener] unable to get running device service")
-	}
-
-	device, err := ds.GetDeviceByName(deviceName)
+	device, err := d.sdkService.GetDeviceByName(deviceName)
 	if err != nil {
 		return err
 	}
@@ -59,22 +53,22 @@ func (d *Driver) startSubscriptionListener() error {
 		d.Logger.Warnf("[Incoming listener] Failed to connect OPCUA client, %s", err)
 		return err
 	}
-	defer client.Close()
+	defer client.Close(ctx)
 
-	sub, err := client.Subscribe(
-		&opcua.SubscriptionParameters{
-			Interval: time.Duration(500) * time.Millisecond,
-		}, make(chan *opcua.PublishNotificationData))
+	notifyCh := make(chan *opcua.PublishNotificationData)
+	sub, err := client.Subscribe(ctx, &opcua.SubscriptionParameters{
+		Interval: time.Duration(500) * time.Millisecond,
+	}, notifyCh)
 	if err != nil {
 		return err
 	}
-	defer sub.Cancel()
+	defer sub.Cancel(ctx)
 
 	if err := d.configureMonitoredItems(sub, resources, deviceName); err != nil {
 		return err
 	}
 
-	go sub.Run(ctx) // start Publish loop
+	// go sub.Run(ctx) // start Publish loop
 
 	// read from subscription's notification channel until ctx is cancelled
 	for {
@@ -83,15 +77,27 @@ func (d *Driver) startSubscriptionListener() error {
 		case <-ctx.Done():
 			return nil
 			// receive Publish Notification Data
-		case res := <-sub.Notifs:
+		case res := <-notifyCh:
 			if res.Error != nil {
 				d.Logger.Debug(res.Error.Error())
 				continue
 			}
+
 			switch x := res.Value.(type) {
 			// result type: DateChange StatusChange
 			case *ua.DataChangeNotification:
 				d.handleDataChange(x)
+
+			// case *ua.EventNotificationList:
+			// 	for _, item := range x.Events {
+			// 		d.Logger.Debug("Event for client handle: %v\n", item.ClientHandle)
+			// 		for i, field := range item.EventFields {
+			// 			d.Logger.Debug("%v: %v of Type: %T", eventFieldNames[i], field.Value(), field.Value())
+			// 		}
+			// 	}
+
+			default:
+				d.Logger.Debug("what's this publish result? %T", res.Value)
 			}
 		}
 	}
@@ -105,12 +111,13 @@ func (d *Driver) getClient(device models.Device) (*opcua.Client, error) {
 		keyFile  = d.serviceConfig.OPCUAServer.KeyFile
 	)
 
-	endpoint, xerr := config.FetchEndpoint(device.Protocols)
+	endpoint, xerr := FetchEndpoint(device.Protocols)
 	if xerr != nil {
 		return nil, xerr
 	}
 
-	endpoints, err := opcua.GetEndpoints(endpoint)
+	ctx := context.Background()
+	endpoints, err := opcua.GetEndpoints(ctx, endpoint)
 	if err != nil {
 		return nil, err
 	}
@@ -129,20 +136,16 @@ func (d *Driver) getClient(device models.Device) (*opcua.Client, error) {
 		opcua.SecurityFromEndpoint(ep, ua.UserTokenTypeAnonymous),
 	}
 
-	return opcua.NewClient(ep.EndpointURL, opts...), nil
+	return opcua.NewClient(ep.EndpointURL, opts...)
 }
 
 func (d *Driver) configureMonitoredItems(sub *opcua.Subscription, resources, deviceName string) error {
-	ds := service.RunningService()
-	if ds == nil {
-		return fmt.Errorf("[Incoming listener] unable to get running device service")
-	}
 
 	d.mu.Lock()
 	defer d.mu.Unlock()
 
 	for i, node := range strings.Split(resources, ",") {
-		deviceResource, ok := ds.DeviceResource(deviceName, node)
+		deviceResource, ok := d.sdkService.DeviceResource(deviceName, node)
 		if !ok {
 			return fmt.Errorf("[Incoming listener] Unable to find device resource with name %s", node)
 		}
@@ -162,7 +165,8 @@ func (d *Driver) configureMonitoredItems(sub *opcua.Subscription, resources, dev
 		// map the client handle so we know what the value returned represents
 		d.resourceMap[handle] = node
 		miCreateRequest := opcua.NewMonitoredItemCreateRequestWithDefaults(id, ua.AttributeIDValue, handle)
-		res, err := sub.Monitor(ua.TimestampsToReturnBoth, miCreateRequest)
+		ctx := context.Background()
+		res, err := sub.Monitor(ctx, ua.TimestampsToReturnBoth, miCreateRequest)
 		if err != nil || res.Results[0].StatusCode != ua.StatusOK {
 			return err
 		}
@@ -190,12 +194,7 @@ func (d *Driver) onIncomingDataReceived(data interface{}, nodeResourceName strin
 	deviceName := d.serviceConfig.OPCUAServer.DeviceName
 	reading := data
 
-	ds := service.RunningService()
-	if ds == nil {
-		return fmt.Errorf("[Incoming listener] unable to get running device service")
-	}
-
-	deviceResource, ok := ds.DeviceResource(deviceName, nodeResourceName)
+	deviceResource, ok := d.sdkService.DeviceResource(deviceName, nodeResourceName)
 	if !ok {
 		d.Logger.Warnf("[Incoming listener] Incoming reading ignored. No DeviceObject found: name=%v deviceResource=%v value=%v", deviceName, nodeResourceName, data)
 		return nil
