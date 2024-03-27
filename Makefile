@@ -12,7 +12,7 @@ SDKVERSION=$(shell cat ./go.mod | grep 'github.com/edgexfoundry/device-sdk-go/v3
 
 DOCKER_TAG=$(VERSION)-dev
 
-GOFLAGS=-ldflags "-X github.com/edgexfoundry/device-opcua-go.Version=$(VERSION) \
+GOFLAGS=-ldflags "-X github.com/edgexfoundry/device-opc-ua.Version=$(VERSION) \
                   -X github.com/edgexfoundry/device-sdk-go/v3/internal/common.SDKVersion=$(SDKVERSION)" \
                    -trimpath -mod=readonly
 GOTESTFLAGS?=-race

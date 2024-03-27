@@ -1,5 +1,16 @@
 # OPC-UA Device Service
 
+
+> **Warning**  
+> The **main** branch of this repository contains work-in-progress development code for the upcoming release, and is **not guaranteed to be stable or working**.
+> It is only compatible with the [main branch of edgex-compose](https://github.com/edgexfoundry/edgex-compose) which uses the Docker images built from the **main** branch of this repo and other repos.
+>
+> **The source for the latest release can be found at [Releases](https://github.com/edgexfoundry/device-opc-ua/releases).**
+
+## Documentation
+
+For latest documentation please visit https://docs.edgexfoundry.org/latest/microservices/device/services/device-opc-ua/Purpose
+
 ## Overview
 
 This repository is a Go-based EdgeX Foundry Device Service which uses OPC-UA protocol to interact with the devices or IoT objects.
@@ -22,45 +33,21 @@ This repository is a Go-based EdgeX Foundry Device Service which uses OPC-UA pro
 
 Download the Prosys OPC UA Simulation Server from [here](https://www.prosysopc.com/products/opc-ua-simulation-server/). Install and run it to have access to the default configured resources.
 
+### Configuration
+
+Modify [configuration.yaml](./cmd/res/configuration.yaml) file found under the `./cmd/res` folder if needed
+
 ### Pre-defined Devices
 
-Define devices for device-sdk to auto upload device profile and create device instance. Please modify `devices.toml` file found under the `./cmd/res/devices` folder.
+Define devices for device-sdk to auto upload device profile and create device instance. Please modify [Simple_Devices.yaml](./cmd/res/devices/Simple-Devices.yaml) file found under the `./cmd/res/devices` folder.
 
 > This device service is currently limited to a single device instance.
 
-```toml
-# Pre-define Devices
-[[DeviceList]]
-  Name = "SimulationServer"
-  Profile = "OPCUA-Server"
-  Description = "OPCUA device is created for test purpose"
-  Labels = [ "test" ]
-  [DeviceList.Protocols]
-      [DeviceList.Protocols.opcua]
-          Endpoint = "opc.tcp://127.0.0.1:53530/OPCUA/SimulationServer"
-```
-
-### Configuration
-
-Modify `configuration.toml` file found under the `./cmd/res` folder if needed
-
-```toml
-# Driver configs
-[OPCUAServer]
-DeviceName = "SimulationServer"   # Name of existing Device
-Policy = "None"                   # Security policy: None, Basic128Rsa15, Basic256, Basic256Sha256. Default: None
-Mode = "None"                     # Security mode: None, Sign, SignAndEncrypt. Default: None
-CertFile = ""                     # Path to cert.pem. Required for security mode/policy != None
-KeyFile = ""                      # Path to private key.pem. Required for security mode/policy != None
-  [OPCUAServer.Writable]
-  Resources = "Counter,Random"    # Device resources related to Node IDs to subscribe to (comma-separated values)
-```
-
-## Device Profile
+### Device Profile
 
 A Device Profile can be thought of as a template of a type or classification of a Device.
 
-Write a device profile for your own devices; define `deviceResources` and `deviceCommands`. Please refer to `cmd/res/profiles/OpcuaServer.yaml`.
+Write a device profile for your own devices; define `deviceResources` and `deviceCommands`. Please refer to [OpcuaServer.yaml](cmd/res/profiles/OpcuaServer.yaml).
 
 ### Using Methods
 
@@ -91,19 +78,20 @@ Notice that method calls require specifying the NodeId of both the method and it
 
 The `attributes` field may also contain an `inputMap: []` that passes parameters to the method, if applicable.
 
-## Build and Run
 
-```bash
-make build
-cd cmd
-EDGEX_SECURITY_SECRET_STORE=false ./device-opcua -cp -d -o
-```
+## Build Instructions
 
-## Build a Container Image
+1.  Clone the device-rest-go repo with the following command:
 
-```bash
-make docker
-```
+        git clone https://github.com/edgexfoundry/device-opc-ua.git
+
+2.  Build a docker image by using the following command:
+
+        make docker
+
+3.  Alternatively the device service can be built natively:
+
+        make build
 
 ## Testing
 
@@ -127,6 +115,12 @@ python3 -m pip install opcua
 # Run tests
 make test
 ```
+
+## Packaging
+
+This component is packaged as docker images.
+
+Please refer to the [Dockerfile](./Dockerfile) and [Docker Compose Builder](https://github.com/edgexfoundry/edgex-compose/tree/main/compose-builder) scripts.
 
 ## Reference
 
