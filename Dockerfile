@@ -6,7 +6,7 @@
 # SPDX-License-Identifier: Apache-2.0
 #
 FROM golang:1.21-alpine3.18 AS builder
-WORKDIR /device-opcua-go
+WORKDIR /device-opcua
 
 # Install our build time packages.
 RUN apk update && apk add --no-cache make git zeromq-dev gcc pkgconfig musl-dev
@@ -28,10 +28,10 @@ RUN apk --no-cache upgrade
 # expose command data port
 EXPOSE 59997
 
-COPY --from=builder /device-opcua-go/cmd/device-opcua /
-COPY --from=builder /device-opcua-go/cmd/res /res
+COPY --from=builder /device-opcua/cmd/device-opcua /
+COPY --from=builder /device-opcua/cmd/res /res
 COPY LICENSE /
-COPY --from=builder /device-opcua-go/Attribution.txt /Attribution.txt
+COPY --from=builder /device-opcua/Attribution.txt /Attribution.txt
 
 ENTRYPOINT ["/device-opcua"]
 CMD ["--cp=consul://edgex-core-consul:8500", "--registry"]

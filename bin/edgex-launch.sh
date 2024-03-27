@@ -1,7 +1,7 @@
 #!/bin/bash
 #
 # Copyright (c) 2018 Mainflux
-# Copyright (C) 2023 YIQISOFT
+# Copyright (C) 2024 YIQISOFT
 #
 # SPDX-License-Identifier: Apache-2.0
 #

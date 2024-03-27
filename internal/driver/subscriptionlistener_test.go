@@ -1,7 +1,7 @@
 // -*- Mode: Go; indent-tabs-mode: t -*-
 //
 // Copyright (C) 2021 Schneider Electric
-// Copyright (C) 2023 YIQISOFT
+// Copyright (C) 2024 YIQISOFT
 //
 // SPDX-License-Identifier: Apache-2.0
 

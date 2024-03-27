@@ -3,7 +3,7 @@
 // Copyright (C) 2018 Canonical Ltd
 // Copyright (C) 2018 IOTech Ltd
 // Copyright (C) 2021 Schneider Electric
-// Copyright (C) 2023 YIQISOFT
+// Copyright (C) 2024 YIQISOFT
 //
 // SPDX-License-Identifier: Apache-2.0
 
