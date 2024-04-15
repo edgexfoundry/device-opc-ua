@@ -13,12 +13,15 @@ import (
 	"context"
 	"fmt"
 	"sync"
+	"time"
 
 	"github.com/edgexfoundry/device-sdk-go/v3/pkg/interfaces"
 	sdkModel "github.com/edgexfoundry/device-sdk-go/v3/pkg/models"
 	"github.com/edgexfoundry/go-mod-core-contracts/v3/clients/logger"
 	"github.com/edgexfoundry/go-mod-core-contracts/v3/errors"
 	"github.com/edgexfoundry/go-mod-core-contracts/v3/models"
+	"github.com/gopcua/opcua"
+	"github.com/gopcua/opcua/ua"
 )
 
 var once sync.Once
@@ -33,6 +36,7 @@ type Driver struct {
 	resourceMap   map[uint32]string
 	mu            sync.Mutex
 	ctxCancel     context.CancelFunc
+	clientMap     map[string]*opcua.Client
 }
 
 // NewProtocolDriver returns a new protocol driver object
@@ -51,6 +55,7 @@ func (d *Driver) Initialize(sdk interfaces.DeviceServiceSDK) error {
 	d.serviceConfig = &ServiceConfig{}
 	d.mu.Lock()
 	d.resourceMap = make(map[uint32]string)
+	d.clientMap = make(map[string]*opcua.Client)
 	d.mu.Unlock()
 
 	if err := sdk.LoadCustomConfig(d.serviceConfig, CustomConfigSectionName); err != nil {
@@ -138,6 +143,11 @@ func (d *Driver) Start() error {
 func (d *Driver) Stop(force bool) error {
 	d.mu.Lock()
 	d.resourceMap = nil
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	for _, cli := range d.clientMap {
+		cli.Close(ctx)
+	}
 	d.mu.Unlock()
 	d.cleanup()
 	return nil
@@ -162,4 +172,19 @@ func getNodeID(attrs map[string]interface{}, id string) (string, error) {
 	}
 
 	return identifier.(string), nil
+}
+
+func (d *Driver) buildClient(ctx context.Context, endpoint string) (*opcua.Client, error) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	if client, ok := d.clientMap[endpoint]; ok {
+		return client, nil
+	}
+
+	client, _ := opcua.NewClient(endpoint, opcua.SecurityMode(ua.MessageSecurityModeNone))
+	if err := client.Connect(ctx); err != nil {
+		return nil, err
+	}
+	d.clientMap[endpoint] = client
+	return client, nil
 }

@@ -30,14 +30,12 @@ func (d *Driver) HandleReadCommands(deviceName string, protocols map[string]mode
 	if err != nil {
 		return nil, err
 	}
-	ctx := context.Background()
 
-	client, _ := opcua.NewClient(endpoint, opcua.SecurityMode(ua.MessageSecurityModeNone))
-	if err := client.Connect(ctx); err != nil {
+	client, cliErr := d.buildClient(context.Background(), endpoint)
+	if cliErr != nil {
 		d.Logger.Warnf("Driver.HandleReadCommands: Failed to connect OPCUA client, %s", err)
-		return nil, err
+		return nil, cliErr
 	}
-	defer client.Close(ctx)
 
 	return d.processReadCommands(client, reqs)
 }
