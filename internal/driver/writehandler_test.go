@@ -16,6 +16,7 @@ import (
 	"github.com/edgexfoundry/go-mod-core-contracts/v3/clients/logger"
 	"github.com/edgexfoundry/go-mod-core-contracts/v3/common"
 	"github.com/edgexfoundry/go-mod-core-contracts/v3/models"
+	"github.com/gopcua/opcua"
 )
 
 func TestDriver_HandleWriteCommands(t *testing.T) {
@@ -110,7 +111,8 @@ func TestDriver_HandleWriteCommands(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			d := &Driver{
-				Logger: &logger.MockLogger{},
+				Logger:    &logger.MockLogger{},
+				clientMap: make(map[string]*opcua.Client),
 			}
 			if err := d.HandleWriteCommands(tt.args.deviceName, tt.args.protocols, tt.args.reqs, tt.args.params); (err != nil) != tt.wantErr {
 				t.Errorf("Driver.HandleWriteCommands() error = %v, wantErr %v", err, tt.wantErr)
