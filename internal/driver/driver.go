@@ -12,13 +12,12 @@ package driver
 import (
 	"context"
 	"fmt"
-	"sync"
-
 	"github.com/edgexfoundry/device-sdk-go/v3/pkg/interfaces"
 	sdkModel "github.com/edgexfoundry/device-sdk-go/v3/pkg/models"
 	"github.com/edgexfoundry/go-mod-core-contracts/v3/clients/logger"
 	"github.com/edgexfoundry/go-mod-core-contracts/v3/errors"
 	"github.com/edgexfoundry/go-mod-core-contracts/v3/models"
+	"sync"
 )
 
 var once sync.Once
@@ -26,13 +25,14 @@ var driver *Driver
 
 // Driver struct
 type Driver struct {
-	Logger        logger.LoggingClient
-	AsyncCh       chan<- *sdkModel.AsyncValues
-	sdkService    interfaces.DeviceServiceSDK
-	serviceConfig *ServiceConfig
-	resourceMap   map[uint32]string
-	mu            sync.Mutex
-	ctxCancel     context.CancelFunc
+	Logger           logger.LoggingClient
+	AsyncCh          chan<- *sdkModel.AsyncValues
+	sdkService       interfaces.DeviceServiceSDK
+	serviceConfig    *ServiceConfig
+	resourceMap      map[uint32]ResourceDetail
+	mu               sync.Mutex
+	ctxCancel        map[string]context.CancelFunc
+	uaConnectionPool *NamedConnectionPool
 }
 
 // NewProtocolDriver returns a new protocol driver object
@@ -50,7 +50,7 @@ func (d *Driver) Initialize(sdk interfaces.DeviceServiceSDK) error {
 	d.AsyncCh = sdk.AsyncValuesChannel()
 	d.serviceConfig = &ServiceConfig{}
 	d.mu.Lock()
-	d.resourceMap = make(map[uint32]string)
+	d.resourceMap = make(map[uint32]ResourceDetail)
 	d.mu.Unlock()
 
 	if err := sdk.LoadCustomConfig(d.serviceConfig, CustomConfigSectionName); err != nil {
@@ -59,46 +59,68 @@ func (d *Driver) Initialize(sdk interfaces.DeviceServiceSDK) error {
 
 	d.Logger.Debugf("Custom config is: %v", d.serviceConfig)
 
-	if err := d.serviceConfig.OPCUAServer.Validate(); err != nil {
-		return errors.NewCommonEdgeXWrapper(err)
-	}
-
-	if err := sdk.ListenForCustomConfigChanges(&d.serviceConfig.OPCUAServer.Writable, WritableInfoSectionName, d.updateWritableConfig); err != nil {
+	if err := sdk.ListenForCustomConfigChanges(&d.serviceConfig.OPCUAServer, CustomConfigSectionName, d.updateClientInfo); err != nil {
 		return errors.NewCommonEdgeX(errors.Kind(err), fmt.Sprintf("unable to listen for changes for '%s' custom configuration", WritableInfoSectionName), err)
 	}
+
+	// Initialize ua connection pool
+	d.uaConnectionPool = New(WaitForConnection, &d.serviceConfig.OPCUAServer)
 
 	return nil
 }
 
 // Callback function provided to ListenForCustomConfigChanges to update
 // the configuration when OPCUAServer.Writable changes
-func (d *Driver) updateWritableConfig(rawWritableConfig interface{}) {
-	updated, ok := rawWritableConfig.(*WritableInfo)
+func (d *Driver) updateClientInfo(iClientInfo interface{}) {
+	clientInfo, ok := iClientInfo.(*ClientInfo)
 	if !ok {
-		d.Logger.Error("unable to update writable config: Cannot cast raw config to type 'WritableInfo'")
+		d.Logger.Error("updateClientInfo: type assertion failed")
 		return
 	}
+	d.uaConnectionPool.Reset(clientInfo)
 
+	// recreate subscriptions
 	d.cleanup()
+	devices := d.sdkService.Devices()
+	go d.startSubscriber(devices)
+}
 
-	d.serviceConfig.OPCUAServer.Writable = *updated
-
-	go d.startSubscriber()
+func (d *Driver) removeSubscriber(deviceName string) {
+	cancelFunc, exists := d.ctxCancel[deviceName]
+	if exists {
+		cancelFunc()
+		delete(d.ctxCancel, deviceName)
+	}
 }
 
 // Start or restart the subscription listener
-func (d *Driver) startSubscriber() {
-	err := d.startSubscriptionListener()
+func (d *Driver) startSubscriber(devices []models.Device) {
+	err := d.startSubscriptionListener(devices)
 	if err != nil {
 		d.Logger.Errorf("Driver.Initialize: Start incoming data Listener failed: %v", err)
 	}
+}
+
+func (d *Driver) startSubscriberByDeviceName(deviceName string) {
+	device, err := d.sdkService.GetDeviceByName(deviceName)
+	if err != nil {
+		d.Logger.Errorf("Driver.Initialize: Start incoming data Listener failed: %v", err)
+		return
+	}
+
+	d.removeSubscriber(deviceName)
+
+	go d.startSubscriber([]models.Device{device})
 }
 
 // Close the existing context.
 // This, in turn, cancels the existing subscription if it exists
 func (d *Driver) cleanup() {
 	if d.ctxCancel != nil {
-		d.ctxCancel()
+		for deviceName, cancel := range d.ctxCancel {
+			cancel()
+			delete(d.ctxCancel, deviceName)
+		}
 		d.ctxCancel = nil
 	}
 }
@@ -106,9 +128,21 @@ func (d *Driver) cleanup() {
 // AddDevice is a callback function that is invoked
 // when a new Device associated with this Device Service is added
 func (d *Driver) AddDevice(deviceName string, protocols map[string]models.ProtocolProperties, adminState models.AdminState) error {
+	// if device is locked, do nothing
+	if adminState == models.Locked {
+		return nil
+	}
+
+	// validate protocol properties
+	_, err := createConnectionInfo(protocols)
+	if err != nil {
+		return err
+	}
+
 	// Start subscription listener when device is added.
 	// This does not happen automatically like it does when the device is updated
-	go d.startSubscriber()
+	d.startSubscriberByDeviceName(deviceName)
+
 	d.Logger.Debugf("Device %s is added", deviceName)
 	return nil
 }
@@ -116,6 +150,19 @@ func (d *Driver) AddDevice(deviceName string, protocols map[string]models.Protoc
 // UpdateDevice is a callback function that is invoked
 // when a Device associated with this Device Service is updated
 func (d *Driver) UpdateDevice(deviceName string, protocols map[string]models.ProtocolProperties, adminState models.AdminState) error {
+	// if device is locked, try to terminate the connection pool
+	if adminState == models.Locked {
+		d.uaConnectionPool.TerminateNamedPool(deviceName)
+	}
+	info, err := createConnectionInfo(protocols)
+	if err != nil {
+		return err
+	}
+	// recreate connection pool
+	d.uaConnectionPool.CheckUpdatesAndDoUpdate(deviceName, info)
+
+	d.startSubscriberByDeviceName(deviceName)
+
 	d.Logger.Debugf("Device %s is updated", deviceName)
 	return nil
 }
@@ -123,6 +170,8 @@ func (d *Driver) UpdateDevice(deviceName string, protocols map[string]models.Pro
 // RemoveDevice is a callback function that is invoked
 // when a Device associated with this Device Service is removed
 func (d *Driver) RemoveDevice(deviceName string, protocols map[string]models.ProtocolProperties) error {
+	d.uaConnectionPool.TerminateNamedPool(deviceName)
+	d.removeSubscriber(deviceName)
 	d.Logger.Debugf("Device %s is removed", deviceName)
 	return nil
 }
@@ -138,6 +187,7 @@ func (d *Driver) Start() error {
 func (d *Driver) Stop(force bool) error {
 	d.mu.Lock()
 	d.resourceMap = nil
+	d.uaConnectionPool.Reset(&ClientInfo{})
 	d.mu.Unlock()
 	d.cleanup()
 	return nil
@@ -148,7 +198,7 @@ func (d *Driver) Discover() error {
 }
 
 func (d *Driver) ValidateDevice(device models.Device) error {
-	_, err := FetchEndpoint(device.Protocols)
+	_, err := createConnectionInfo(device.Protocols)
 	if err != nil {
 		return fmt.Errorf("invalid protocol properties, %v", err)
 	}

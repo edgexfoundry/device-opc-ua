@@ -28,23 +28,18 @@ func (d *Driver) HandleWriteCommands(deviceName string, protocols map[string]mod
 	reqs []sdkModel.CommandRequest, params []*sdkModel.CommandValue) error {
 
 	d.Logger.Debugf("Driver.HandleWriteCommands: protocols: %v, resource: %v, parameters: %v", protocols, reqs[0].DeviceResourceName, params)
-	var err error
 
-	// create device client and open connection
-	endpoint, err := FetchEndpoint(protocols)
+	info, err := createConnectionInfo(protocols)
 	if err != nil {
 		return err
 	}
-
-	ctx := context.Background()
-	client, _ := opcua.NewClient(endpoint, opcua.SecurityMode(ua.MessageSecurityModeNone))
-	if err := client.Connect(ctx); err != nil {
-		d.Logger.Warnf("Driver.HandleWriteCommands: Failed to connect OPCUA client, %s", err)
+	connection, err := d.uaConnectionPool.GetConnection(deviceName, info)
+	if err != nil {
 		return err
 	}
-	defer client.Close(ctx)
+	defer connection.Close()
 
-	return d.processWriteCommands(client, reqs, params)
+	return d.processWriteCommands(connection.GetClient(), reqs, params)
 }
 
 func (d *Driver) processWriteCommands(client *opcua.Client, reqs []sdkModel.CommandRequest, params []*sdkModel.CommandValue) error {

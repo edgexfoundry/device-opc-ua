@@ -12,7 +12,6 @@ package driver
 import (
 	"context"
 	"fmt"
-
 	sdkModel "github.com/edgexfoundry/device-sdk-go/v3/pkg/models"
 	"github.com/edgexfoundry/go-mod-core-contracts/v3/models"
 	"github.com/gopcua/opcua"
@@ -25,21 +24,16 @@ func (d *Driver) HandleReadCommands(deviceName string, protocols map[string]mode
 
 	d.Logger.Debugf("Driver.HandleReadCommands: protocols: %v resource: %v attributes: %v", protocols, reqs[0].DeviceResourceName, reqs[0].Attributes)
 
-	// create device client and open connection
-	endpoint, err := FetchEndpoint(protocols)
+	info, err := createConnectionInfo(protocols)
 	if err != nil {
 		return nil, err
 	}
-	ctx := context.Background()
-
-	client, _ := opcua.NewClient(endpoint, opcua.SecurityMode(ua.MessageSecurityModeNone))
-	if err := client.Connect(ctx); err != nil {
-		d.Logger.Warnf("Driver.HandleReadCommands: Failed to connect OPCUA client, %s", err)
+	connection, err := d.uaConnectionPool.GetConnection(deviceName, info)
+	if err != nil {
 		return nil, err
 	}
-	defer client.Close(ctx)
-
-	return d.processReadCommands(client, reqs)
+	defer connection.Close()
+	return d.processReadCommands(connection.GetClient(), reqs)
 }
 
 func (d *Driver) processReadCommands(client *opcua.Client, reqs []sdkModel.CommandRequest) ([]*sdkModel.CommandValue, error) {

@@ -11,6 +11,8 @@ package driver
 
 import (
 	"fmt"
+	"log/slog"
+	"time"
 
 	"github.com/edgexfoundry/go-mod-core-contracts/v3/errors"
 	"github.com/edgexfoundry/go-mod-core-contracts/v3/models"
@@ -18,7 +20,7 @@ import (
 
 // ServiceConfig configuration struct
 type ServiceConfig struct {
-	OPCUAServer OPCUAServerConfig
+	OPCUAServer ClientInfo
 }
 
 // UpdateFromRaw updates the service's full configuration from raw data received from
@@ -34,56 +36,185 @@ func (sw *ServiceConfig) UpdateFromRaw(rawConfig interface{}) bool {
 	return true
 }
 
-// OPCUAServerConfig server information defined by the device profile
-type OPCUAServerConfig struct {
-	DeviceName string
-	Policy     string
-	Mode       string
-	CertFile   string
-	KeyFile    string
-	Writable   WritableInfo
+// ClientInfo server information defined by the device profile
+type ClientInfo struct {
+	CertFile string
+	KeyFile  string
+	// ApplicationURI is optional. but, if it is specified, it must match the URI field in "Subject Alternative Name" of the client certificate.
+	ApplicationURI string
 }
 
-// WritableInfo configuration data that can be written without restarting the service
-type WritableInfo struct {
-	Resources string
+type ConnectionInfo struct {
+	EndpointURL    string
+	SecurityPolicy SecurityPolicy
+	SecurityMode   SecurityMode
+	AuthType       AuthType
+	Username       string
+	Password       string
+	AutoReconnect  bool
+	// ReconnectInterval is the time interval to reconnect to the server when the connection is lost when AutoReconnect is set to true.
+	//default value is 5 seconds
+	ReconnectInterval time.Duration
+	// MaxPoolSize is the maximum number of connections that can be created in the connection pool. default value is 1
+	MaxPoolSize uint32
 }
 
-var policies map[string]int = map[string]int{
-	"None":           1,
-	"Basic128Rsa15":  2,
-	"Basic256":       3,
-	"Basic256Sha256": 4,
+func (info *ConnectionInfo) Equals(other *ConnectionInfo) bool {
+	return info.EndpointURL == other.EndpointURL &&
+		info.SecurityPolicy == other.SecurityPolicy &&
+		info.SecurityMode == other.SecurityMode &&
+		info.AuthType == other.AuthType &&
+		info.Username == other.Username &&
+		info.Password == other.Password &&
+		info.AutoReconnect == other.AutoReconnect &&
+		info.ReconnectInterval == other.ReconnectInterval &&
+		info.MaxPoolSize == other.MaxPoolSize
 }
 
-var modes map[string]int = map[string]int{
-	"None":           1,
-	"Sign":           2,
-	"SignAndEncrypt": 3,
+type CommandInfo struct {
+	watchable bool
+	nodeId    string
+	methodId  string
+	objectId  string
+	inputMap  []string
 }
 
-// Validate ensures your custom configuration has proper values.
-func (info *OPCUAServerConfig) Validate() errors.EdgeX {
-	if info.DeviceName == "" {
-		return errors.NewCommonEdgeX(errors.KindContractInvalid, "OPCUAServerInfo.DeviceName configuration setting cannot be blank", nil)
+func (c *CommandInfo) isMethodCall() bool {
+	return len(c.methodId) > 0
+}
+
+func (c *CommandInfo) IsWatchable() bool {
+	return c.watchable
+}
+
+func (c *CommandInfo) HasArgs() bool {
+	return len(c.inputMap) > 0
+}
+
+func createConnectionInfo(protocols map[string]models.ProtocolProperties) (*ConnectionInfo, error) {
+	props, exists := protocols[Protocol]
+	if !exists {
+		return nil, fmt.Errorf("protocol for [%s] not exists", Protocol)
 	}
 
-	if _, ok := policies[info.Policy]; !ok {
-		return errors.NewCommonEdgeX(errors.KindContractInvalid, "OPCUAServerInfo.Policy configuration setting mismatch", nil)
+	var (
+		endpointUrl       any
+		securityPolicy    any
+		securityMode      any
+		authType          any
+		username          any
+		password          any
+		autoReconnect     any
+		reconnectInterval any
+		maxPoolSize       any
+	)
+
+	endpointUrl, ok := props[EndpointField]
+	if !ok {
+		return nil, fmt.Errorf("unable to create OPC UA connection info, protocol config [%s] not exists", EndpointField)
 	}
-	if _, ok := modes[info.Mode]; !ok {
-		return errors.NewCommonEdgeX(errors.KindContractInvalid, "OPCUAServerInfo.Mode configuration setting mismatch", nil)
+
+	securityPolicy, ok = props[SecurityPolicyField]
+	if !ok {
+		securityPolicy = SecurityPolicyNone
 	}
-	if info.Mode != "None" || info.Policy != "None" {
-		if info.CertFile == "" {
-			return errors.NewCommonEdgeX(errors.KindContractInvalid, "OPCUAServerInfo.CertFile configuration setting cannot be blank when a security mode or policy is set", nil)
+	securityMode, ok = props[SecurityModeField]
+	if !ok {
+		if securityPolicy.(SecurityPolicy) == SecurityPolicyNone {
+			securityMode = SecurityModeNone
+		} else {
+			securityMode = SecurityModeSign
 		}
-		if info.KeyFile == "" {
-			return errors.NewCommonEdgeX(errors.KindContractInvalid, "OPCUAServerInfo.KeyFile configuration setting cannot be blank when a security mode or policy is set", nil)
+	}
+	authType, ok = props[AuthTypeField]
+	if !ok {
+		authType = AuthTypeAnonymous
+	}
+	switch authType.(AuthType) {
+	case AuthTypeAnonymous:
+		break
+	case AuthTypeUsername:
+		username, ok = props[UsernameField]
+		if !ok {
+			return nil, fmt.Errorf("unable to create OPC UA connection info, missing username while Authentication Type is AuthTypeUsername")
 		}
+		password, ok = props[PasswordField]
+		if !ok {
+			password = ""
+		}
+	default:
+		return nil, fmt.Errorf("unable to create OPC UA connection info, because of unsupported Authentication Type [%s]", authType)
 	}
 
-	return nil
+	autoReconnect, ok = props[AutoReconnectField]
+	if !ok {
+		autoReconnect = true
+	}
+	reconnectInterval, ok = props[ReconnectIntervalField]
+	if !ok {
+		reconnectInterval = 5 * time.Second
+	}
+	maxPoolSize, ok = props[MaxPoolSizeField]
+	if !ok {
+		maxPoolSize = 1
+	}
+
+	return &ConnectionInfo{
+		EndpointURL:       endpointUrl.(string),
+		SecurityPolicy:    securityPolicy.(SecurityPolicy),
+		SecurityMode:      securityMode.(SecurityMode),
+		AuthType:          authType.(AuthType),
+		Username:          username.(string),
+		Password:          password.(string),
+		AutoReconnect:     autoReconnect.(bool),
+		ReconnectInterval: reconnectInterval.(time.Duration),
+		MaxPoolSize:       maxPoolSize.(uint32),
+	}, nil
+}
+
+func CreateCommandInfo(resourceName string, req map[string]interface{}) (*CommandInfo, error) {
+	ret := &CommandInfo{
+		watchable: false,
+	}
+
+	watchable, hasWatchable := req[WATCHABLE]
+	nodeId, hasNodeId := req[NODE]
+	methodId, hasMethodId := req[METHOD]
+	objectId, hasObjectId := req[OBJECT]
+	inputMap, hasInputMap := req[INPUTMAP]
+	if hasWatchable && watchable.(bool) {
+		if !hasNodeId {
+			return nil, errors.NewCommonEdgeX(errors.KindStatusConflict, fmt.Sprintf("missing required attribute 'nodeId' for watchable command: [%v]", resourceName), nil)
+		}
+		ret.watchable = true
+		ret.nodeId = nodeId.(string)
+	} else if !hasNodeId && !hasMethodId {
+		return nil, errors.NewCommonEdgeX(errors.KindContractInvalid, fmt.Sprintf("either '%s' or '%s' should be defined for command: [%v]", NODE, METHOD, resourceName), nil)
+	} else if hasNodeId && hasMethodId {
+		slog.Warn(fmt.Sprintf("[Creating CommandInfo] both '%s' and '%s' are defined for command: [%v], '%s' will be ignored", NODE, METHOD, resourceName, METHOD))
+		ret.nodeId = nodeId.(string)
+	} else if hasMethodId {
+		if !hasObjectId {
+			return nil, errors.NewCommonEdgeX(errors.KindContractInvalid, fmt.Sprintf("'%s' is required when '%s' is defined for command: [%v]", OBJECT, METHOD, resourceName), nil)
+		}
+		ret.methodId = methodId.(string)
+		ret.objectId = objectId.(string)
+		if hasInputMap {
+			imElements := inputMap.([]interface{})
+			if len(imElements) > 0 {
+				ret.inputMap = make([]string, len(imElements))
+				for i := 0; i < len(imElements); i++ {
+					ret.inputMap[i] = imElements[i].(string)
+				}
+			}
+		}
+	} else {
+		if !hasNodeId {
+			return nil, errors.NewCommonEdgeX(errors.KindContractInvalid, fmt.Sprintf("all required attributes not defined for command: [%v]", resourceName), nil)
+		}
+		ret.nodeId = nodeId.(string)
+	}
+	return ret, nil
 }
 
 // FetchEndpoint returns the OPCUA endpoint defined in the configuration
@@ -92,9 +223,9 @@ func FetchEndpoint(protocols map[string]models.ProtocolProperties) (string, erro
 	if !ok {
 		return "", errors.NewCommonEdgeX(errors.KindContractInvalid, fmt.Sprintf("'%s' protocol properties is not defined", Protocol), nil)
 	}
-	endpoint, ok := properties[Endpoint]
+	endpoint, ok := properties[EndpointField]
 	if !ok {
-		return "", errors.NewCommonEdgeX(errors.KindContractInvalid, fmt.Sprintf("'%s' not found in the '%s' protocol properties", Endpoint, Protocol), nil)
+		return "", errors.NewCommonEdgeX(errors.KindContractInvalid, fmt.Sprintf("'%s' not found in the '%s' protocol properties", EndpointField, Protocol), nil)
 	}
 	endpointString, ok := endpoint.(string)
 	if !ok {
