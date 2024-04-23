@@ -1,3 +1,19 @@
+/*
+ * Copyright (c) 2024.  liushenglong_8597@outlook.com.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package driver
 
 import (
@@ -19,8 +35,7 @@ type UaConnectionPool struct {
 
 func newConnectionPool(connectionInfo *ConnectionInfo, clientInfo *ClientInfo) *UaConnectionPool {
 	maxSize := connectionInfo.MaxPoolSize
-	maxSizePtr := &maxSize
-	if maxSizePtr == nil || maxSize == 0 {
+	if maxSize == 0 {
 		maxSize = 1
 	}
 	pool := &UaConnectionPool{
@@ -35,14 +50,15 @@ func newConnectionPool(connectionInfo *ConnectionInfo, clientInfo *ClientInfo) *
 		if err != nil {
 			panic(err)
 		}
-		runtime.SetFinalizer(client, func(client *opcua.Client) {
-			closeConnection(client)
+		runtime.SetFinalizer(client, func(cli *opcua.Client) {
+			closeConnection(cli)
 		})
 		return client
 	}
 	return pool
 }
 
+// Borrow will block until a client is available or the pool is terminated.
 func (p *UaConnectionPool) Borrow() (*UaPooledClientWrapper, error) {
 	_ = p.semMax.Acquire(context.Background(), 1)
 	if p.terminated {
@@ -56,6 +72,7 @@ func (p *UaConnectionPool) Borrow() (*UaPooledClientWrapper, error) {
 	return wrapper, nil
 }
 
+// TryBorrow returns immediately with a wrapper if available, or nil when the pool is full.
 func (p *UaConnectionPool) TryBorrow() *UaPooledClientWrapper {
 	if !p.terminated && p.semMax.TryAcquire(1) {
 		client := p.pool.Get().(*opcua.Client)
@@ -67,6 +84,7 @@ func (p *UaConnectionPool) TryBorrow() *UaPooledClientWrapper {
 	return nil
 }
 
+// Return wrapped client to the pool
 func (p *UaConnectionPool) Return(wrapper *UaPooledClientWrapper) {
 	defer p.semMax.Release(1)
 
@@ -80,6 +98,7 @@ func (p *UaConnectionPool) Return(wrapper *UaPooledClientWrapper) {
 
 	wrapper.holder = nil
 	if wrapper.invalid {
+		closeConnection(wrapper.client)
 		wrapper.invalid = false
 	} else {
 		client := wrapper.client
@@ -100,14 +119,4 @@ func (p *UaConnectionPool) Terminate() {
 	p.terminated = true
 	p.clientInfo = nil
 	p.connectionInfo = nil
-}
-
-func checkConnection(client *opcua.Client) bool {
-	return client.State() == opcua.Connected
-}
-
-func closeConnection(client *opcua.Client) {
-	if client.State() != opcua.Closed {
-		_ = client.Close(context.Background())
-	}
 }

@@ -4,6 +4,7 @@
 // Copyright (C) 2018 IOTech Ltd
 // Copyright (C) 2021 Schneider Electric
 // Copyright (C) 2024 YIQISOFT
+// Copyright (C) 2024 liushenglong_8597@outlook.com
 //
 // SPDX-License-Identifier: Apache-2.0
 
@@ -51,6 +52,7 @@ func (d *Driver) Initialize(sdk interfaces.DeviceServiceSDK) error {
 	d.serviceConfig = &ServiceConfig{}
 	d.mu.Lock()
 	d.resourceMap = make(map[uint32]ResourceDetail)
+	d.ctxCancel = make(map[string]context.CancelFunc)
 	d.mu.Unlock()
 
 	if err := sdk.LoadCustomConfig(d.serviceConfig, CustomConfigSectionName); err != nil {
@@ -65,7 +67,8 @@ func (d *Driver) Initialize(sdk interfaces.DeviceServiceSDK) error {
 
 	// Initialize ua connection pool
 	d.uaConnectionPool = New(WaitForConnection, &d.serviceConfig.OPCUAServer)
-
+	// create subscriptions for existing watchable resources
+	d.startExistingWatchableResourcesListener()
 	return nil
 }
 
@@ -80,9 +83,8 @@ func (d *Driver) updateClientInfo(iClientInfo interface{}) {
 	d.uaConnectionPool.Reset(clientInfo)
 
 	// recreate subscriptions
-	d.cleanup()
-	devices := d.sdkService.Devices()
-	go d.startSubscriber(devices)
+	d.cleanupListeners()
+	d.startExistingWatchableResourcesListener()
 }
 
 func (d *Driver) removeSubscriber(deviceName string) {
@@ -113,15 +115,20 @@ func (d *Driver) startSubscriberByDeviceName(deviceName string) {
 	go d.startSubscriber([]models.Device{device})
 }
 
+func (d *Driver) startExistingWatchableResourcesListener() {
+	devices := d.sdkService.Devices()
+	go d.startSubscriber(devices)
+}
+
 // Close the existing context.
 // This, in turn, cancels the existing subscription if it exists
-func (d *Driver) cleanup() {
-	if d.ctxCancel != nil {
+func (d *Driver) cleanupListeners() {
+	if len(d.ctxCancel) > 0 {
 		for deviceName, cancel := range d.ctxCancel {
 			cancel()
 			delete(d.ctxCancel, deviceName)
 		}
-		d.ctxCancel = nil
+		//d.ctxCancel = nil
 	}
 }
 
@@ -142,8 +149,7 @@ func (d *Driver) AddDevice(deviceName string, protocols map[string]models.Protoc
 	// Start subscription listener when device is added.
 	// This does not happen automatically like it does when the device is updated
 	d.startSubscriberByDeviceName(deviceName)
-
-	d.Logger.Debugf("Device %s is added", deviceName)
+	d.Logger.Debugf("Device %s is added\n", deviceName)
 	return nil
 }
 
@@ -187,9 +193,11 @@ func (d *Driver) Start() error {
 func (d *Driver) Stop(force bool) error {
 	d.mu.Lock()
 	d.resourceMap = nil
+	d.cleanupListeners()
+	d.ctxCancel = nil
 	d.uaConnectionPool.Reset(&ClientInfo{})
 	d.mu.Unlock()
-	d.cleanup()
+	d.cleanupListeners()
 	return nil
 }
 

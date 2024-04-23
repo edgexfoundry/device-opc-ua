@@ -25,6 +25,7 @@
 package test
 
 import (
+	"fmt"
 	"net"
 	"os"
 	"os/exec"
@@ -39,31 +40,35 @@ import (
 // Server runs a python test server.
 type Server struct {
 	// Path is the path to the Python server.
-	Path string
-
+	Path           string
+	ServerPKPath   string
+	ServerCertPath string
 	// Endpoint is the endpoint address which will be set
 	// after the server has started.
 	Endpoint string
 
 	// Opts contains the client options required to connect to the server.
 	// They are valid after the server has been started.
-	Opts []opcua.Option
-
+	Opts   []opcua.Option
 	cmd    *exec.Cmd
 	waitch chan error
 }
 
 // NewServer creates a test server and starts it. The function
 // panics if the server cannot be started.
-func NewServer(path string) *Server {
+func NewServer(path string, certPath ...string) *Server {
 	s := &Server{Path: path, waitch: make(chan error)}
+	if len(certPath) == 2 {
+		s.ServerPKPath = certPath[0]
+		s.ServerCertPath = certPath[1]
+	}
 	if err := s.Run(); err != nil {
 		panic(err)
 	}
 	return s
 }
 
-// Run starts the python-based server
+// Run starts the Python-based server
 func (s *Server) Run() error {
 	wd, err := os.Getwd()
 	if err != nil {
@@ -80,8 +85,12 @@ func (s *Server) Run() error {
 			return errors.Errorf("unable to find Python executable")
 		}
 	}
-
-	s.cmd = exec.Command(py, path)
+	if len(s.ServerCertPath) == 0 || len(s.ServerPKPath) == 0 {
+		s.cmd = exec.Command(py, path)
+	} else {
+		fmt.Printf("running %v opcua_server.py %v %v\n", py, s.ServerPKPath, s.ServerCertPath)
+		s.cmd = exec.Command(py, path, s.ServerPKPath, s.ServerCertPath)
+	}
 	s.cmd.Stdout = os.Stdout
 	s.cmd.Stderr = os.Stderr
 	s.Endpoint = Protocol + Address
@@ -115,7 +124,7 @@ func (s *Server) Run() error {
 	}
 }
 
-// Close stops the python-based server
+// Close stops the Python-based server
 func (s *Server) Close() error {
 	if s.cmd == nil {
 		return errors.Errorf("not running")

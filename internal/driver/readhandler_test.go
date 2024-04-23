@@ -2,23 +2,36 @@
 //
 // Copyright (C) 2021 Schneider Electric
 // Copyright (C) 2024 YIQISOFT
+// Copyright (C) 2024 liushenglong_8597@outlook.com
 //
 // SPDX-License-Identifier: Apache-2.0
 
 package driver
 
 import (
+	"fmt"
+	"os"
 	"reflect"
 	"testing"
 
 	"github.com/edgexfoundry/device-opc-ua/internal/test"
 	sdkModel "github.com/edgexfoundry/device-sdk-go/v3/pkg/models"
-	"github.com/edgexfoundry/go-mod-core-contracts/v3/clients/logger"
 	"github.com/edgexfoundry/go-mod-core-contracts/v3/common"
 	"github.com/edgexfoundry/go-mod-core-contracts/v3/models"
 )
 
 func TestDriver_HandleReadCommands(t *testing.T) {
+	certs, err := test.CreateCerts()
+	if err != nil {
+		t.Errorf("Failed to create certificates: %v", err)
+	}
+	defer test.Clean(certs)
+	bytes, err := os.ReadFile(certs.ServerPEMCertPath)
+	if err != nil {
+		t.Errorf("Failed to read server certificate: %v", err)
+	}
+	servercert := string(bytes)
+
 	type args struct {
 		deviceName string
 		protocols  map[string]models.ProtocolProperties
@@ -45,7 +58,7 @@ func TestDriver_HandleReadCommands(t *testing.T) {
 			args: args{
 				deviceName: "Test",
 				protocols: map[string]models.ProtocolProperties{
-					Protocol: {Endpoint: test.Protocol + "unknown"},
+					Protocol: {EndpointField: test.Protocol + "unknown"},
 				},
 				reqs: []sdkModel.CommandRequest{{DeviceResourceName: "TestVar1"}},
 			},
@@ -57,7 +70,10 @@ func TestDriver_HandleReadCommands(t *testing.T) {
 			args: args{
 				deviceName: "Test",
 				protocols: map[string]models.ProtocolProperties{
-					Protocol: {Endpoint: test.Protocol + test.Address},
+					Protocol: {
+						EndpointField:       test.Protocol + test.Address,
+						SecurityPolicyField: SecurityPolicyNone,
+					},
 				},
 				reqs: []sdkModel.CommandRequest{{
 					DeviceResourceName: "TestVar1",
@@ -73,7 +89,10 @@ func TestDriver_HandleReadCommands(t *testing.T) {
 			args: args{
 				deviceName: "Test",
 				protocols: map[string]models.ProtocolProperties{
-					Protocol: {Endpoint: test.Protocol + test.Address},
+					Protocol: {
+						EndpointField:       test.Protocol + test.Address,
+						SecurityPolicyField: SecurityPolicyNone,
+					},
 				},
 				reqs: []sdkModel.CommandRequest{{
 					DeviceResourceName: "TestResource1",
@@ -89,12 +108,18 @@ func TestDriver_HandleReadCommands(t *testing.T) {
 			args: args{
 				deviceName: "Test",
 				protocols: map[string]models.ProtocolProperties{
-					Protocol: {Endpoint: test.Protocol + test.Address},
+					Protocol: {
+						EndpointField:       test.Protocol + test.Address,
+						SecurityPolicyField: SecurityPolicyNone,
+					},
 				},
 				reqs: []sdkModel.CommandRequest{{
 					DeviceResourceName: "TestResource1",
-					Attributes:         map[string]interface{}{METHOD: "ns=2;s=test"},
-					Type:               common.ValueTypeInt32,
+					Attributes: map[string]interface{}{
+						METHOD: "ns=2;s=test",
+						OBJECT: "2",
+					},
+					Type: common.ValueTypeInt32,
 				}},
 			},
 			want:    make([]*sdkModel.CommandValue, 1),
@@ -105,7 +130,10 @@ func TestDriver_HandleReadCommands(t *testing.T) {
 			args: args{
 				deviceName: "Test",
 				protocols: map[string]models.ProtocolProperties{
-					Protocol: {Endpoint: test.Protocol + test.Address},
+					Protocol: {
+						EndpointField:       test.Protocol + test.Address,
+						SecurityPolicyField: SecurityPolicyNone,
+					},
 				},
 				reqs: []sdkModel.CommandRequest{{
 					DeviceResourceName: "TestResource1",
@@ -121,7 +149,10 @@ func TestDriver_HandleReadCommands(t *testing.T) {
 			args: args{
 				deviceName: "Test",
 				protocols: map[string]models.ProtocolProperties{
-					Protocol: {Endpoint: test.Protocol + test.Address},
+					Protocol: {
+						EndpointField:       test.Protocol + test.Address,
+						SecurityPolicyField: SecurityPolicyNone,
+					},
 				},
 				reqs: []sdkModel.CommandRequest{{
 					DeviceResourceName: "TestVar1",
@@ -142,7 +173,12 @@ func TestDriver_HandleReadCommands(t *testing.T) {
 			args: args{
 				deviceName: "Test",
 				protocols: map[string]models.ProtocolProperties{
-					Protocol: {Endpoint: test.Protocol + test.Address},
+					Protocol: {
+						EndpointField:       test.Protocol + test.Address,
+						SecurityPolicyField: SecurityPolicyBasic256Sha256,
+						SecurityModeField:   SecurityModeSignAndEncrypt,
+						RemotePemCertField:  servercert,
+					},
 				},
 				reqs: []sdkModel.CommandRequest{{
 					DeviceResourceName: "SquareResource",
@@ -160,14 +196,12 @@ func TestDriver_HandleReadCommands(t *testing.T) {
 		},
 	}
 
-	server := test.NewServer("../test/opcua_server.py")
+	server := test.NewServer("../test/opcua_server.py", certs.ServerPKPath, certs.ServerDERCertPath)
 	defer server.Close()
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			d := &Driver{
-				Logger: &logger.MockLogger{},
-			}
+			d := initDriver(certs.ClientPKPath, certs.ClientPEMCertPath)
 			got, err := d.HandleReadCommands(tt.args.deviceName, tt.args.protocols, tt.args.reqs)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("Driver.HandleReadCommands() error = %v, wantErr %v", err, tt.wantErr)
@@ -177,6 +211,7 @@ func TestDriver_HandleReadCommands(t *testing.T) {
 			if len(got) > 0 && got[0] != nil {
 				got[0].Origin = 0
 			}
+			fmt.Printf("readings: %d\n", len(got))
 			if !reflect.DeepEqual(got, tt.want) {
 				t.Errorf("Driver.HandleReadCommands() = %v, want %v", got, tt.want)
 			}

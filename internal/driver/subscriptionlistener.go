@@ -4,6 +4,7 @@
 // Copyright (C) 2018 IOTech Ltd
 // Copyright (C) 2021 Schneider Electric
 // Copyright (C) 2024 YIQISOFT
+// Copyright (C) 2024 liushenglong_8597@outlook.com
 //
 // SPDX-License-Identifier: Apache-2.0
 
@@ -22,7 +23,7 @@ import (
 
 type ResourceDetail struct {
 	deviceName string
-	resource   models.DeviceResource
+	command    *CommandInfo
 }
 
 func (d *Driver) startSubscriptionListener(devices []models.Device) error {
@@ -88,7 +89,7 @@ func (d *Driver) startSubscriptionListener(devices []models.Device) error {
 				// context return
 				case <-ctx.Done():
 					return
-					// receive Publish Notification Data
+				// receive Publish Notification Data
 				case res := <-notifyCh:
 					if res.Error != nil {
 						d.Logger.Debug(res.Error.Error())
@@ -122,7 +123,7 @@ func (d *Driver) startSubscriptionListener(devices []models.Device) error {
 
 func filterResources(resources []models.DeviceResource) (ret []models.DeviceResource) {
 	for _, resource := range resources {
-		info, err := CreateCommandInfo(resource.Name, resource.Attributes)
+		info, err := CreateCommandInfo(resource.Name, resource.Properties.ValueType, resource.Attributes)
 		if err != nil {
 			driver.Logger.Warnf("[Incoming listener] Unable to create command info for resource %s, %s", resource.Name, err)
 			continue
@@ -139,8 +140,8 @@ func (d *Driver) configureMonitoredItems(sub *opcua.Subscription, deviceName str
 	d.mu.Lock()
 	defer d.mu.Unlock()
 
-	for i, deviceResource := range resources {
-		info, err := CreateCommandInfo(deviceResource.Name, deviceResource.Attributes)
+	for _, deviceResource := range resources {
+		info, err := CreateCommandInfo(deviceResource.Name, deviceResource.Properties.ValueType, deviceResource.Attributes)
 		if err != nil {
 			return err
 		}
@@ -152,11 +153,12 @@ func (d *Driver) configureMonitoredItems(sub *opcua.Subscription, deviceName str
 		}
 
 		// arbitrary client handle for the monitoring item
-		handle := uint32(i + 42)
-		// map the client handle so we know what the value returned represents
+		// 24.04.22 - use hash of deviceName as client handle, array index is not unique
+		handle := hash(deviceName)
+		// map the client handle, so we know what the value returned represents
 		d.resourceMap[handle] = ResourceDetail{
 			deviceName: deviceName,
-			resource:   deviceResource,
+			command:    info,
 		}
 		miCreateRequest := opcua.NewMonitoredItemCreateRequestWithDefaults(id, ua.AttributeIDValue, handle)
 		ctx := context.Background()
@@ -186,20 +188,14 @@ func (d *Driver) handleDataChange(dcn *ua.DataChangeNotification) {
 
 func (d *Driver) onIncomingDataReceived(data interface{}, detail ResourceDetail) error {
 	var (
-		deviceName     = detail.deviceName
-		deviceResource = detail.resource
+		deviceName  = detail.deviceName
+		commandInfo = detail.command
 	)
 	reading := data
 
-	req := sdkModels.CommandRequest{
-		DeviceResourceName: deviceResource.Name,
-		Attributes:         deviceResource.Attributes,
-		Type:               deviceResource.Properties.ValueType,
-	}
-
-	result, err := newResult(req, reading)
+	result, err := newResult(commandInfo, reading)
 	if err != nil {
-		d.Logger.Warnf("[Incoming listener] Incoming reading ignored. name=%v deviceResource=%v value=%v", deviceName, deviceResource.Name, data)
+		d.Logger.Warnf("[Incoming listener] Incoming reading ignored. name=%v deviceResource=%v value=%v", deviceName, commandInfo.resourceName, data)
 		return nil
 	}
 
@@ -208,7 +204,7 @@ func (d *Driver) onIncomingDataReceived(data interface{}, detail ResourceDetail)
 		CommandValues: []*sdkModels.CommandValue{result},
 	}
 
-	d.Logger.Infof("[Incoming listener] Incoming reading received: name=%v deviceResource=%v value=%v", deviceName, deviceResource.Name, data)
+	d.Logger.Infof("[Incoming listener] Incoming reading received: name=%v deviceResource=%v value=%v", deviceName, commandInfo.resourceName, data)
 
 	d.AsyncCh <- asyncValues
 

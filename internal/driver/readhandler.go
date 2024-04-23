@@ -4,6 +4,7 @@
 // Copyright (C) 2018 IOTech Ltd
 // Copyright (C) 2021 Schneider Electric
 // Copyright (C) 2024 YIQISOFT
+// Copyright (C) 2024 liushenglong_8597@outlook.com
 //
 // SPDX-License-Identifier: Apache-2.0
 
@@ -11,6 +12,7 @@ package driver
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	sdkModel "github.com/edgexfoundry/device-sdk-go/v3/pkg/models"
 	"github.com/edgexfoundry/go-mod-core-contracts/v3/models"
@@ -22,23 +24,33 @@ import (
 func (d *Driver) HandleReadCommands(deviceName string, protocols map[string]models.ProtocolProperties,
 	reqs []sdkModel.CommandRequest) ([]*sdkModel.CommandValue, error) {
 
-	d.Logger.Debugf("Driver.HandleReadCommands: protocols: %v resource: %v attributes: %v", protocols, reqs[0].DeviceResourceName, reqs[0].Attributes)
-
-	info, err := createConnectionInfo(protocols)
+	var commandInfos = make([]*CommandInfo, len(reqs))
+	fmt.Println("Before create commandInfos")
+	// create and validate command infos before
+	for i, req := range reqs {
+		commandInfo, err := CreateCommandInfo(req.DeviceResourceName, req.Type, req.Attributes)
+		if err != nil {
+			fmt.Printf("Driver.HandleReadCommands: Create command info failed: %v\n", err)
+			return nil, err
+		}
+		commandInfos[i] = commandInfo
+	}
+	fmt.Println("After create commandInfos")
+	connectionInfo, err := createConnectionInfo(protocols)
 	if err != nil {
 		return nil, err
 	}
-	connection, err := d.uaConnectionPool.GetConnection(deviceName, info)
+	connection, err := d.uaConnectionPool.GetConnection(deviceName, connectionInfo)
 	if err != nil {
 		return nil, err
 	}
 	defer connection.Close()
-	return d.processReadCommands(connection.GetClient(), reqs)
+	return d.processReadCommands(connection.GetClient(), commandInfos)
 }
 
-func (d *Driver) processReadCommands(client *opcua.Client, reqs []sdkModel.CommandRequest) ([]*sdkModel.CommandValue, error) {
+func (d *Driver) processReadCommands(client *opcua.Client, reqs []*CommandInfo) ([]*sdkModel.CommandValue, error) {
+	fmt.Println("Driver.HandleReadCommands: Processing read commands")
 	var responses = make([]*sdkModel.CommandValue, len(reqs))
-
 	for i, req := range reqs {
 		// handle every reqs
 		res, err := d.handleReadCommandRequest(client, req)
@@ -52,28 +64,25 @@ func (d *Driver) processReadCommands(client *opcua.Client, reqs []sdkModel.Comma
 	return responses, nil
 }
 
-func (d *Driver) handleReadCommandRequest(deviceClient *opcua.Client, req sdkModel.CommandRequest) (*sdkModel.CommandValue, error) {
+func (d *Driver) handleReadCommandRequest(deviceClient *opcua.Client, info *CommandInfo) (*sdkModel.CommandValue, error) {
 	var result = &sdkModel.CommandValue{}
 	var err error
 
-	_, isMethod := req.Attributes[METHOD]
+	isMethod := info.isMethodCall()
 
 	if isMethod {
-		result, err = makeMethodCall(deviceClient, req)
+		result, err = makeMethodCall(deviceClient, info)
 		d.Logger.Infof("Method command finished: %v", result)
 	} else {
-		result, err = makeReadRequest(deviceClient, req)
+		result, err = makeReadRequest(deviceClient, info)
 		d.Logger.Infof("Read command finished: %v", result)
 	}
 
 	return result, err
 }
 
-func makeReadRequest(deviceClient *opcua.Client, req sdkModel.CommandRequest) (*sdkModel.CommandValue, error) {
-	nodeID, err := getNodeID(req.Attributes, NODE)
-	if err != nil {
-		return nil, fmt.Errorf("Driver.handleReadCommands: %v", err)
-	}
+func makeReadRequest(deviceClient *opcua.Client, req *CommandInfo) (*sdkModel.CommandValue, error) {
+	nodeID := req.nodeId
 
 	id, err := ua.ParseNodeID(nodeID)
 	if err != nil {
@@ -93,7 +102,7 @@ func makeReadRequest(deviceClient *opcua.Client, req sdkModel.CommandRequest) (*
 	if err != nil {
 		return nil, fmt.Errorf("Driver.handleReadCommands: Read failed: %s", err)
 	}
-	if resp.Results[0].Status != ua.StatusOK {
+	if !errors.Is(resp.Results[0].Status, ua.StatusOK) {
 		return nil, fmt.Errorf("Driver.handleReadCommands: Status not OK: %v", resp.Results[0].Status)
 	}
 
@@ -102,35 +111,26 @@ func makeReadRequest(deviceClient *opcua.Client, req sdkModel.CommandRequest) (*
 	return newResult(req, reading)
 }
 
-func makeMethodCall(deviceClient *opcua.Client, req sdkModel.CommandRequest) (*sdkModel.CommandValue, error) {
+func makeMethodCall(deviceClient *opcua.Client, req *CommandInfo) (*sdkModel.CommandValue, error) {
 	var inputs []*ua.Variant
 
-	objectID, err := getNodeID(req.Attributes, OBJECT)
-	if err != nil {
-		return nil, fmt.Errorf("Driver.handleReadCommands: %v", err)
-	}
+	objectID := req.objectId
 	oid, err := ua.ParseNodeID(objectID)
 	if err != nil {
 		return nil, fmt.Errorf("Driver.handleReadCommands: %v", err)
 	}
 
-	methodID, err := getNodeID(req.Attributes, METHOD)
-	if err != nil {
-		return nil, fmt.Errorf("Driver.handleReadCommands: %v", err)
-	}
+	methodID := req.methodId
 	mid, err := ua.ParseNodeID(methodID)
 	if err != nil {
 		return nil, fmt.Errorf("Driver.handleReadCommands: %v", err)
 	}
 
-	inputMap, ok := req.Attributes[INPUTMAP]
-	if ok {
-		imElements := inputMap.([]interface{})
-		if len(imElements) > 0 {
-			inputs = make([]*ua.Variant, len(imElements))
-			for i := 0; i < len(imElements); i++ {
-				inputs[i] = ua.MustVariant(imElements[i].(string))
-			}
+	inputMap := req.inputMap
+	if len(inputMap) > 0 {
+		inputs = make([]*ua.Variant, len(inputMap))
+		for i, el := range inputMap {
+			inputs[i] = ua.MustVariant(el)
 		}
 	}
 
@@ -145,7 +145,7 @@ func makeMethodCall(deviceClient *opcua.Client, req sdkModel.CommandRequest) (*s
 	if err != nil {
 		return nil, fmt.Errorf("Driver.handleReadCommands: Method call failed: %s", err)
 	}
-	if resp.StatusCode != ua.StatusOK {
+	if !errors.Is(resp.StatusCode, ua.StatusOK) {
 		return nil, fmt.Errorf("Driver.handleReadCommands: Method status not OK: %v", resp.StatusCode)
 	}
 

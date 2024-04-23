@@ -11,10 +11,6 @@ Device:
   ProfilesDir: ./res/profiles
 
 OPCUAServer:
-  DeviceName: SimulationServer
-  Policy: None
-  Mode: None
   CertFile: ''
   KeyFile: ''
-  Writable:
-    Resources: 'Counter,Random'
+  ApplicationURI: ''

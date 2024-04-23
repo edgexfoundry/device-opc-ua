@@ -4,6 +4,7 @@
 // Copyright (C) 2018 IOTech Ltd
 // Copyright (C) 2021 Schneider Electric
 // Copyright (C) 2024 YIQISOFT
+// Copyright (C) 2024 liushenglong_8597@outlook.com
 //
 // SPDX-License-Identifier: Apache-2.0
 
@@ -11,6 +12,7 @@ package driver
 
 import (
 	"fmt"
+	"github.com/spf13/cast"
 	"log/slog"
 	"time"
 
@@ -48,6 +50,7 @@ type ConnectionInfo struct {
 	EndpointURL    string
 	SecurityPolicy SecurityPolicy
 	SecurityMode   SecurityMode
+	RemotePemCert  string
 	AuthType       AuthType
 	Username       string
 	Password       string
@@ -59,24 +62,14 @@ type ConnectionInfo struct {
 	MaxPoolSize uint32
 }
 
-func (info *ConnectionInfo) Equals(other *ConnectionInfo) bool {
-	return info.EndpointURL == other.EndpointURL &&
-		info.SecurityPolicy == other.SecurityPolicy &&
-		info.SecurityMode == other.SecurityMode &&
-		info.AuthType == other.AuthType &&
-		info.Username == other.Username &&
-		info.Password == other.Password &&
-		info.AutoReconnect == other.AutoReconnect &&
-		info.ReconnectInterval == other.ReconnectInterval &&
-		info.MaxPoolSize == other.MaxPoolSize
-}
-
 type CommandInfo struct {
-	watchable bool
-	nodeId    string
-	methodId  string
-	objectId  string
-	inputMap  []string
+	resourceName string
+	watchable    bool
+	nodeId       string
+	methodId     string
+	objectId     string
+	inputMap     []string
+	valueType    string
 }
 
 func (c *CommandInfo) isMethodCall() bool {
@@ -98,83 +91,169 @@ func createConnectionInfo(protocols map[string]models.ProtocolProperties) (*Conn
 	}
 
 	var (
-		endpointUrl       any
-		securityPolicy    any
-		securityMode      any
-		authType          any
-		username          any
-		password          any
-		autoReconnect     any
-		reconnectInterval any
-		maxPoolSize       any
+		err               error
+		endpointUrl       string
+		securityPolicy    SecurityPolicy
+		securityMode      SecurityMode
+		remotePemCert     string
+		authType          AuthType
+		username          string
+		password          string
+		autoReconnect     bool
+		reconnectInterval time.Duration
+		maxPoolSize       uint32
 	)
 
-	endpointUrl, ok := props[EndpointField]
+	ep, ok := props[EndpointField]
 	if !ok {
 		return nil, fmt.Errorf("unable to create OPC UA connection info, protocol config [%s] not exists", EndpointField)
 	}
-
-	securityPolicy, ok = props[SecurityPolicyField]
+	endpointUrl = cast.ToString(ep)
+	sp, ok := props[SecurityPolicyField]
 	if !ok {
-		securityPolicy = SecurityPolicyNone
-	}
-	securityMode, ok = props[SecurityModeField]
-	if !ok {
-		if securityPolicy.(SecurityPolicy) == SecurityPolicyNone {
-			securityMode = SecurityModeNone
-		} else {
-			securityMode = SecurityModeSign
+		return nil, fmt.Errorf("unable to create OPC UA connection info, missing SecurityPolicy")
+	} else {
+		securityPolicy, err = toSecurityPolicy(sp)
+		if err != nil {
+			return nil, err
 		}
 	}
-	authType, ok = props[AuthTypeField]
+
+	// if security policy is SecurityPolicyNone, then security mode can only be SecurityModeNone.
+	// meanwhile, if security policy is not SecurityPolicyNone, then security mode is required.
+	if securityPolicy == SecurityPolicyNone {
+		securityMode = SecurityModeNone
+	} else {
+		sm, ok := props[SecurityModeField]
+		if !ok {
+			return nil, fmt.Errorf("unable to create OPC UA connection info, missing SecurityMode while SecurityPolicy is not SecurityPolicyNone")
+		} else {
+			securityMode, err = toSecurityMode(sm)
+			if err != nil {
+				return nil, err
+			}
+			if securityMode == SecurityModeNone {
+				return nil, fmt.Errorf("unable to create OPC UA connection info, SecurityMode cannot be SecurityModeNone while SecurityPolicy is not SecurityPolicyNone")
+			}
+		}
+	}
+
+	// if security mode is not SecurityModeNone, then server certificate is required to apply the asymmetric encryption
+	if securityMode != SecurityModeNone {
+		rpc, ok := props[RemotePemCertField]
+		if !ok {
+			return nil, fmt.Errorf("unable to create OPC UA connection info, missing RemotePemCert while SecurityMode is not SecurityModeNone")
+		}
+		remotePemCert = fmt.Sprintf("%v", rpc)
+	}
+
+	at, ok := props[AuthTypeField]
 	if !ok {
 		authType = AuthTypeAnonymous
+	} else {
+		authType, err = toAuthType(at)
+		if err != nil {
+			return nil, err
+		}
 	}
-	switch authType.(AuthType) {
-	case AuthTypeAnonymous:
-		break
-	case AuthTypeUsername:
-		username, ok = props[UsernameField]
+	if authType == AuthTypeUsername {
+		uname, ok := props[UsernameField]
 		if !ok {
 			return nil, fmt.Errorf("unable to create OPC UA connection info, missing username while Authentication Type is AuthTypeUsername")
 		}
-		password, ok = props[PasswordField]
+		username = cast.ToString(uname)
+		passwd, ok := props[PasswordField]
 		if !ok {
 			password = ""
+		} else {
+			password = cast.ToString(passwd)
 		}
-	default:
-		return nil, fmt.Errorf("unable to create OPC UA connection info, because of unsupported Authentication Type [%s]", authType)
 	}
 
-	autoReconnect, ok = props[AutoReconnectField]
+	arc, ok := props[AutoReconnectField]
 	if !ok {
 		autoReconnect = true
+	} else {
+		autoReconnect = cast.ToBool(arc)
 	}
-	reconnectInterval, ok = props[ReconnectIntervalField]
+
+	ri, ok := props[ReconnectIntervalField]
 	if !ok {
 		reconnectInterval = 5 * time.Second
+	} else {
+		// this will handle pure digital characters and expressions like "5s", "5m" etc.
+		reconnectInterval = cast.ToDuration(ri)
 	}
-	maxPoolSize, ok = props[MaxPoolSizeField]
+	mps, ok := props[MaxPoolSizeField]
 	if !ok {
 		maxPoolSize = 1
+	} else {
+		maxPoolSize = cast.ToUint32(mps)
 	}
 
 	return &ConnectionInfo{
-		EndpointURL:       endpointUrl.(string),
-		SecurityPolicy:    securityPolicy.(SecurityPolicy),
-		SecurityMode:      securityMode.(SecurityMode),
-		AuthType:          authType.(AuthType),
-		Username:          username.(string),
-		Password:          password.(string),
-		AutoReconnect:     autoReconnect.(bool),
-		ReconnectInterval: reconnectInterval.(time.Duration),
-		MaxPoolSize:       maxPoolSize.(uint32),
+		EndpointURL:       endpointUrl,
+		SecurityPolicy:    securityPolicy,
+		SecurityMode:      securityMode,
+		RemotePemCert:     remotePemCert,
+		AuthType:          authType,
+		Username:          username,
+		Password:          password,
+		AutoReconnect:     autoReconnect,
+		ReconnectInterval: reconnectInterval,
+		MaxPoolSize:       maxPoolSize,
 	}, nil
 }
 
-func CreateCommandInfo(resourceName string, req map[string]interface{}) (*CommandInfo, error) {
+func toSecurityPolicy(sp any) (SecurityPolicy, error) {
+	spStr := fmt.Sprintf("%v", sp)
+	if len(spStr) == 0 {
+		return SecurityPolicyNone, nil
+	}
+
+	policy := SecurityPolicy(spStr)
+	switch policy {
+	case SecurityPolicyNone:
+	case SecurityPolicyBasic256:
+	case SecurityPolicyBasic128Rsa15:
+	case SecurityPolicyBasic256Sha256:
+	case SecurityPolicyAes128Sha256RsaOaep:
+	case SecurityPolicyAes256Sha256RsaPss:
+	default:
+		return "", fmt.Errorf("unsupported SecurityPolicy [%s]", spStr)
+	}
+	return policy, nil
+}
+
+func toSecurityMode(mode interface{}) (SecurityMode, error) {
+	switch mode {
+	case SecurityModeNone:
+		return SecurityModeNone, nil
+	case SecurityModeSign:
+		return SecurityModeSign, nil
+	case SecurityModeSignAndEncrypt:
+		return SecurityModeSignAndEncrypt, nil
+	default:
+		return "", fmt.Errorf("unsupported SecurityMode [%s]", mode)
+	}
+}
+
+func toAuthType(at interface{}) (AuthType, error) {
+	switch at {
+	case AuthTypeAnonymous:
+		return AuthTypeAnonymous, nil
+	case AuthTypeUsername:
+		return AuthTypeUsername, nil
+	default:
+		return "", fmt.Errorf("unable to create OPC UA connection info, because of unsupported Authentication Type [%s]", at)
+	}
+}
+
+func CreateCommandInfo(resourceName string, valueType string, req map[string]interface{}) (*CommandInfo, error) {
 	ret := &CommandInfo{
-		watchable: false,
+		resourceName: resourceName,
+		watchable:    false,
+		valueType:    valueType,
 	}
 
 	watchable, hasWatchable := req[WATCHABLE]
@@ -197,14 +276,14 @@ func CreateCommandInfo(resourceName string, req map[string]interface{}) (*Comman
 		if !hasObjectId {
 			return nil, errors.NewCommonEdgeX(errors.KindContractInvalid, fmt.Sprintf("'%s' is required when '%s' is defined for command: [%v]", OBJECT, METHOD, resourceName), nil)
 		}
-		ret.methodId = methodId.(string)
-		ret.objectId = objectId.(string)
+		ret.methodId = cast.ToString(methodId)
+		ret.objectId = cast.ToString(objectId)
 		if hasInputMap {
 			imElements := inputMap.([]interface{})
 			if len(imElements) > 0 {
 				ret.inputMap = make([]string, len(imElements))
 				for i := 0; i < len(imElements); i++ {
-					ret.inputMap[i] = imElements[i].(string)
+					ret.inputMap[i] = cast.ToString(imElements[i])
 				}
 			}
 		}
@@ -215,21 +294,4 @@ func CreateCommandInfo(resourceName string, req map[string]interface{}) (*Comman
 		ret.nodeId = nodeId.(string)
 	}
 	return ret, nil
-}
-
-// FetchEndpoint returns the OPCUA endpoint defined in the configuration
-func FetchEndpoint(protocols map[string]models.ProtocolProperties) (string, errors.EdgeX) {
-	properties, ok := protocols[Protocol]
-	if !ok {
-		return "", errors.NewCommonEdgeX(errors.KindContractInvalid, fmt.Sprintf("'%s' protocol properties is not defined", Protocol), nil)
-	}
-	endpoint, ok := properties[EndpointField]
-	if !ok {
-		return "", errors.NewCommonEdgeX(errors.KindContractInvalid, fmt.Sprintf("'%s' not found in the '%s' protocol properties", EndpointField, Protocol), nil)
-	}
-	endpointString, ok := endpoint.(string)
-	if !ok {
-		return "", errors.NewCommonEdgeX(errors.KindContractInvalid, fmt.Sprintf("cannot convert '%v' to string type", endpoint), nil)
-	}
-	return endpointString, nil
 }

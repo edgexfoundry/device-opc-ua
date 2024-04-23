@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import sys
 
 # MIT License
 
@@ -24,16 +25,35 @@
 
 from opcua import ua, Server
 
+
 # https://github.com/gopcua/opcua/blob/affd2bf105fe37786d69cd3607b5f7ed085f8c90/uatest/method_server.py
 def square(parent, variant):
     v = int(variant.Value)
     variant.Value = str(v * v)
     return [variant]
 
+
 # https://github.com/gopcua/opcua/blob/affd2bf105fe37786d69cd3607b5f7ed085f8c90/uatest/rw_server.py
 if __name__ == "__main__":
+    args = sys.argv
+    if len(args) != 1 and len(args) != 3:
+        print("Usage: python3 opcua_server.py [path_to_server_pk.pem] [path_to_server_cert.der]")
+        sys.exit(1)
+    secure = len(args) == 3
+
     server = Server()
     server.set_endpoint("opc.tcp://0.0.0.0:48408/")
+    security_policy = [
+        ua.SecurityPolicyType.NoSecurity,
+    ]
+
+    if secure:
+        security_policy.append(ua.SecurityPolicyType.Basic256Sha256_Sign)
+        security_policy.append(ua.SecurityPolicyType.Basic256Sha256_SignAndEncrypt)
+        server.load_private_key(args[1])
+        server.load_certificate(args[2])
+
+    server.set_security_policy(security_policy)
 
     ns = server.register_namespace("http://gopcua.com/")
     main = server.nodes.objects.add_object(ua.NodeId("main", ns), "main")

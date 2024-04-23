@@ -2,6 +2,7 @@
 //
 // Copyright (C) 2021 Schneider Electric
 // Copyright (C) 2024 YIQISOFT
+// Copyright (C) 2024 liushenglong_8597@outlook.com
 //
 // SPDX-License-Identifier: Apache-2.0
 
@@ -13,12 +14,17 @@ import (
 
 	"github.com/edgexfoundry/device-opc-ua/internal/test"
 	sdkModel "github.com/edgexfoundry/device-sdk-go/v3/pkg/models"
-	"github.com/edgexfoundry/go-mod-core-contracts/v3/clients/logger"
 	"github.com/edgexfoundry/go-mod-core-contracts/v3/common"
 	"github.com/edgexfoundry/go-mod-core-contracts/v3/models"
 )
 
 func TestDriver_HandleWriteCommands(t *testing.T) {
+	certs, err := test.CreateCerts()
+	if err != nil {
+		t.Errorf("Failed to create certificates: %v", err)
+	}
+	defer test.Clean(certs)
+
 	type args struct {
 		deviceName string
 		protocols  map[string]models.ProtocolProperties
@@ -43,7 +49,7 @@ func TestDriver_HandleWriteCommands(t *testing.T) {
 			name: "NOK - invalid endpoint defined",
 			args: args{
 				deviceName: "Test",
-				protocols:  map[string]models.ProtocolProperties{Protocol: {Endpoint: test.Protocol + "unknown"}},
+				protocols:  map[string]models.ProtocolProperties{Protocol: {EndpointField: test.Protocol + "unknown"}},
 				reqs:       []sdkModel.CommandRequest{{DeviceResourceName: "TestVar1"}},
 			},
 			wantErr: true,
@@ -52,7 +58,7 @@ func TestDriver_HandleWriteCommands(t *testing.T) {
 			name: "NOK - invalid node id",
 			args: args{
 				deviceName: "Test",
-				protocols:  map[string]models.ProtocolProperties{Protocol: {Endpoint: test.Protocol + test.Address}},
+				protocols:  map[string]models.ProtocolProperties{Protocol: {EndpointField: test.Protocol + test.Address}},
 				reqs: []sdkModel.CommandRequest{{
 					DeviceResourceName: "TestResource1",
 					Attributes:         map[string]interface{}{NODE: "2"},
@@ -70,7 +76,7 @@ func TestDriver_HandleWriteCommands(t *testing.T) {
 			name: "NOK - invalid value",
 			args: args{
 				deviceName: "Test",
-				protocols:  map[string]models.ProtocolProperties{Protocol: {Endpoint: test.Protocol + test.Address}},
+				protocols:  map[string]models.ProtocolProperties{Protocol: {EndpointField: test.Protocol + test.Address}},
 				reqs: []sdkModel.CommandRequest{{
 					DeviceResourceName: "TestResource1",
 					Attributes:         map[string]interface{}{NODE: "ns=2;s=rw_int32"},
@@ -88,7 +94,10 @@ func TestDriver_HandleWriteCommands(t *testing.T) {
 			name: "OK - command request with one parameter",
 			args: args{
 				deviceName: "Test",
-				protocols:  map[string]models.ProtocolProperties{Protocol: {Endpoint: test.Protocol + test.Address}},
+				protocols: map[string]models.ProtocolProperties{Protocol: {
+					EndpointField:       test.Protocol + test.Address,
+					SecurityPolicyField: SecurityPolicyNone,
+				}},
 				reqs: []sdkModel.CommandRequest{{
 					DeviceResourceName: "TestResource1",
 					Attributes:         map[string]interface{}{NODE: "ns=2;s=rw_int32"},
@@ -104,14 +113,12 @@ func TestDriver_HandleWriteCommands(t *testing.T) {
 		},
 	}
 
-	server := test.NewServer("../test/opcua_server.py")
+	server := test.NewServer("../test/opcua_server.py", certs.ServerPKPath, certs.ServerDERCertPath)
 	defer server.Close()
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			d := &Driver{
-				Logger: &logger.MockLogger{},
-			}
+			d := initDriver(certs.ClientPKPath, certs.ClientPEMCertPath)
 			if err := d.HandleWriteCommands(tt.args.deviceName, tt.args.protocols, tt.args.reqs, tt.args.params); (err != nil) != tt.wantErr {
 				t.Errorf("Driver.HandleWriteCommands() error = %v, wantErr %v", err, tt.wantErr)
 			}

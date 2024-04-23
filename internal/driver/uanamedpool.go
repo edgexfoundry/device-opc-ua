@@ -1,13 +1,26 @@
+/*
+ * Copyright (c) 2024.  liushenglong_8597@outlook.com.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package driver
 
 import (
-	"context"
 	"fmt"
-	"github.com/gopcua/opcua"
-	"github.com/gopcua/opcua/ua"
 	"log/slog"
+	"reflect"
 	"sync"
-	"time"
 )
 
 type NamedConnectionPool struct {
@@ -21,9 +34,12 @@ type NamedConnectionPool struct {
 type RejectionStrategy string
 
 const (
+	// RejectNewConnection is needed if the pool is full and new request suppose to be rejected directly
 	RejectNewConnection RejectionStrategy = "reject"
 	// WaitForConnection is the default behavior when pool is full
-	WaitForConnection   RejectionStrategy = "wait"
+	WaitForConnection RejectionStrategy = "wait"
+	// CreateNewConnection if pool is full, create a new connection directly that was not managed by pool,
+	// this may lead to inefficiency even resource leakage
 	CreateNewConnection RejectionStrategy = "create"
 )
 
@@ -58,8 +74,10 @@ func (p *NamedConnectionPool) GetConnection(deviceName string, info *ConnectionI
 			return nil, err
 		}
 		return interface{}(wrapper).(ClientWrapper), nil
-	default:
+	case RejectNewConnection:
 		return nil, fmt.Errorf("No available ua client connection in the pool for %s ", info.EndpointURL)
+	default:
+		return nil, fmt.Errorf("unknown rejection strategy %s", p.rejectionStrategy)
 	}
 }
 
@@ -69,7 +87,7 @@ func (p *NamedConnectionPool) CheckUpdatesAndDoUpdate(deviceName string, info *C
 	if !created {
 		return
 	}
-	if !info.Equals(pool.connectionInfo) {
+	if !reflect.DeepEqual(info, pool.connectionInfo) {
 		p.TerminateNamedPool(deviceName)
 	}
 }
@@ -118,71 +136,10 @@ func (p *NamedConnectionPool) getConnectionUnsafe(info *ConnectionInfo) (interfa
 func (p *NamedConnectionPool) getPool(deviceName string, info *ConnectionInfo) *UaConnectionPool {
 	pool, ok := p.pools[deviceName]
 	if !ok {
-		p.rwMu.RLocker()
+		p.rwMu.RLock()
 		defer p.rwMu.RUnlock()
 		pool = newConnectionPool(info, p.clientInfo)
 		p.pools[deviceName] = pool
 	}
 	return pool
-}
-
-func createUaConnection(connectionInfo *ConnectionInfo, clientConfig *ClientInfo) (*opcua.Client, error) {
-	var (
-		endpoint          = connectionInfo.EndpointURL
-		securityPolicy    = connectionInfo.SecurityPolicy
-		securityMode      = connectionInfo.SecurityMode
-		authType          = connectionInfo.AuthType
-		authUsername      = connectionInfo.Username
-		authPassword      = connectionInfo.Password
-		autoReconnect     = connectionInfo.AutoReconnect
-		reconnectInterval = connectionInfo.ReconnectInterval
-		applicationUri    = clientConfig.ApplicationURI
-		certificateFile   = clientConfig.CertFile
-		privateKeyFile    = clientConfig.KeyFile
-	)
-	opts := []opcua.Option{
-		opcua.SecurityPolicy(securityPolicy.String()),
-		opcua.SecurityModeString(securityMode.String()),
-		opcua.AutoReconnect(autoReconnect),
-		opcua.ReconnectInterval(reconnectInterval),
-	}
-	// check client certificate and apply
-	if len(certificateFile) > 0 && len(applicationUri) > 0 && len(privateKeyFile) > 0 {
-		opts = append(opts,
-			opcua.CertificateFile(certificateFile),
-			opcua.PrivateKeyFile(privateKeyFile),
-			opcua.ApplicationURI(applicationUri),
-			opcua.ProductURI(applicationUri),
-			opcua.Lifetime(3600*time.Second),
-			opcua.SessionTimeout(3600*time.Second))
-	}
-	// authentication type
-	switch authType {
-	case AuthTypeAnonymous:
-		opts = append(opts, opcua.AuthAnonymous())
-	case AuthTypeUsername:
-		opts = append(opts, opcua.AuthUsername(authUsername, authPassword))
-	default:
-		return nil, fmt.Errorf("auth type %s not supported yet", authType)
-	}
-	ctx := context.Background()
-	endpoints, err := opcua.GetEndpoints(ctx, endpoint)
-	if err != nil {
-		return nil, err
-	}
-	ep := opcua.SelectEndpoint(endpoints, securityPolicy.String(), ua.MessageSecurityModeFromString(securityMode.String()))
-	if ep == nil {
-		return nil, fmt.Errorf("No exact security configuration match is found, \nendpoint: %s \nsecurity policy: %s\nsecurity mode: %s",
-			endpoint, securityPolicy, securityMode)
-	}
-	opts = append(opts, opcua.SecurityFromEndpoint(ep, ua.UserTokenTypeFromString(authType.String())))
-
-	client, err := opcua.NewClient(endpoint, opts...)
-	if err != nil {
-		return nil, err
-	}
-	if err = client.Connect(ctx); err != nil {
-		return nil, err
-	}
-	return client, nil
 }

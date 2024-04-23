@@ -2,10 +2,13 @@
 //
 // Copyright (C) 2021 Schneider Electric
 // Copyright (C) 2024 YIQISOFT
+// Copyright (C) 2024 liushenglong_8597@outlook.com
 //
 // SPDX-License-Identifier: Apache-2.0
 
 package driver
+
+import "fmt"
 
 const (
 	// CustomConfigSectionName is the name of the configuration options
@@ -23,8 +26,9 @@ const (
 	// METHOD node id attribute
 	METHOD = "methodId"
 	// INPUTMAP attribute
-	INPUTMAP  = "inputMap"
-	WATCHABLE = "watchable"
+	INPUTMAP   = "inputMap"
+	WATCHABLE  = "watchable"
+	VALUE_TYPE = "valueType"
 )
 
 const (
@@ -34,6 +38,7 @@ const (
 	EndpointField          = "Endpoint"
 	SecurityPolicyField    = "SecurityPolicy"
 	SecurityModeField      = "SecurityMode"
+	RemotePemCertField     = "RemotePemCert"
 	AuthTypeField          = "AuthType"
 	UsernameField          = "Username"
 	PasswordField          = "Password"
@@ -54,7 +59,7 @@ const (
 )
 
 func (sp *SecurityPolicy) String() string {
-	return string(*sp)
+	return fmt.Sprintf("%v", *sp)
 }
 
 type SecurityMode string
@@ -66,7 +71,7 @@ const (
 )
 
 func (sm *SecurityMode) String() string {
-	return string(*sm)
+	return fmt.Sprintf("%v", *sm)
 }
 
 type AuthType string
@@ -80,5 +85,5 @@ const (
 )
 
 func (ap *AuthType) String() string {
-	return string(*ap)
+	return fmt.Sprintf("%v", *ap)
 }
