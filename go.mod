@@ -4,7 +4,7 @@ go 1.21
 
 require (
 	github.com/edgexfoundry/device-sdk-go/v3 v3.2.0-dev.12
-	github.com/edgexfoundry/go-mod-core-contracts/v3 v3.2.0-dev.16
+	github.com/edgexfoundry/go-mod-core-contracts/v3 v3.2.0-dev.17
 	github.com/gopcua/opcua v0.5.3
 	github.com/spf13/cast v1.6.0
 	github.com/stretchr/testify v1.9.0
