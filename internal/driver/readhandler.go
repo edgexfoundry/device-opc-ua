@@ -25,7 +25,6 @@ func (d *Driver) HandleReadCommands(deviceName string, protocols map[string]mode
 	reqs []sdkModel.CommandRequest) ([]*sdkModel.CommandValue, error) {
 
 	var commandInfos = make([]*CommandInfo, len(reqs))
-	fmt.Println("Before create commandInfos")
 	// create and validate command infos before
 	for i, req := range reqs {
 		commandInfo, err := CreateCommandInfo(req.DeviceResourceName, req.Type, req.Attributes)
@@ -35,7 +34,6 @@ func (d *Driver) HandleReadCommands(deviceName string, protocols map[string]mode
 		}
 		commandInfos[i] = commandInfo
 	}
-	fmt.Println("After create commandInfos")
 	connectionInfo, err := createConnectionInfo(protocols)
 	if err != nil {
 		return nil, err
@@ -49,7 +47,6 @@ func (d *Driver) HandleReadCommands(deviceName string, protocols map[string]mode
 }
 
 func (d *Driver) processReadCommands(client *opcua.Client, reqs []*CommandInfo) ([]*sdkModel.CommandValue, error) {
-	fmt.Println("Driver.HandleReadCommands: Processing read commands")
 	var responses = make([]*sdkModel.CommandValue, len(reqs))
 	for i, req := range reqs {
 		// handle every reqs

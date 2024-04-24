@@ -223,13 +223,13 @@ func Benchmark_HandleReadCommands_ReuseClient(b *testing.B) {
 	server := test.NewServer("../test/opcua_server.py")
 	defer server.Close()
 
-	d := &Driver{
-		Logger:    &logger.MockLogger{},
-		clientMap: map[string]*opcua.Client{},
-	}
+	d := initSimpleDriver()
 	deviceName := "Test"
 	protocols := map[string]models.ProtocolProperties{
-		Protocol: {Endpoint: test.Protocol + test.Address},
+		Protocol: {
+			EndpointField:       test.Protocol + test.Address,
+			SecurityPolicyField: SecurityPolicyNone,
+		},
 	}
 	reqs := []sdkModel.CommandRequest{{
 		DeviceResourceName: "TestVar1",
@@ -250,18 +250,15 @@ func Benchmark_HandleReadCommands_WithoutReuseClient(b *testing.B) {
 	server := test.NewServer("../test/opcua_server.py")
 	defer server.Close()
 
-	d := &Driver{
-		Logger:    &logger.MockLogger{},
-		clientMap: map[string]*opcua.Client{},
-	}
+	d := initSimpleDriver()
 	deviceName := "Test"
 	protocols := map[string]models.ProtocolProperties{
-		Protocol: {Endpoint: test.Protocol + test.Address},
+		Protocol: {EndpointField: test.Protocol + test.Address},
 	}
-	reqs := []sdkModel.CommandRequest{{
-		DeviceResourceName: "TestVar1",
-		Attributes:         map[string]interface{}{NODE: "ns=2;s=ro_int32"},
-		Type:               common.ValueTypeInt32,
+	reqs := []*CommandInfo{{
+		resourceName: "TestVar1",
+		nodeId:       "ns=2;s=ro_int32",
+		valueType:    common.ValueTypeInt32,
 	}}
 
 	b.ResetTimer()
@@ -274,23 +271,20 @@ func handleReadCommandsWithoutReuseClient(
 	d *Driver,
 	deviceName string,
 	protocols map[string]models.ProtocolProperties,
-	reqs []sdkModel.CommandRequest) ([]*sdkModel.CommandValue, error) {
+	reqs []*CommandInfo) ([]*sdkModel.CommandValue, error) {
 
-	d.Logger.Debugf("Driver.HandleReadCommands: protocols: %v resource: %v attributes: %v", protocols, reqs[0].DeviceResourceName, reqs[0].Attributes)
-
-	// create device client and open connection
-	endpoint, err := FetchEndpoint(protocols)
+	d.Logger.Debugf("Driver.HandleReadCommands: protocols: %v resource: %v attributes: %v", protocols, reqs[0].resourceName, reqs[0])
+	info, err := createConnectionInfo(protocols)
 	if err != nil {
 		return nil, err
 	}
-
-	ctx := context.Background()
-	client, _ := opcua.NewClient(endpoint, opcua.SecurityMode(ua.MessageSecurityModeNone))
-	if err := client.Connect(ctx); err != nil {
-		d.Logger.Warnf("Driver.HandleReadCommands: Failed to connect OPCUA client, %s", err)
+	// create device client and open connection
+	wrapper, err := d.uaConnectionPool.getConnectionUnsafe(info)
+	if err != nil {
 		return nil, err
 	}
-	defer client.Close(ctx)
+	clientWrapper := wrapper.(ClientWrapper)
+	defer clientWrapper.Close()
 
-	return d.processReadCommands(client, reqs)
+	return d.processReadCommands(clientWrapper.GetClient(), reqs)
 }
