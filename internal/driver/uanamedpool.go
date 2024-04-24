@@ -28,7 +28,7 @@ type NamedConnectionPool struct {
 	pools             map[string]*UaConnectionPool
 	rejectionStrategy RejectionStrategy
 	clientInfo        *ClientInfo
-	rwMu              sync.RWMutex
+	mu                sync.Mutex
 }
 
 type RejectionStrategy string
@@ -95,8 +95,8 @@ func (p *NamedConnectionPool) CheckUpdatesAndDoUpdate(deviceName string, info *C
 // Reset method aims to update clientInfo all pools are using, so pools should be recreated with that updated
 // clientInfo. This method should block the creation of new pool instances.
 func (p *NamedConnectionPool) Reset(info *ClientInfo) {
-	p.rwMu.Lock()
-	defer p.rwMu.Unlock()
+	p.mu.Lock()
+	defer p.mu.Unlock()
 
 	p.clientInfo = info
 	for device, pool := range p.pools {
@@ -136,10 +136,13 @@ func (p *NamedConnectionPool) getConnectionUnsafe(info *ConnectionInfo) (interfa
 func (p *NamedConnectionPool) getPool(deviceName string, info *ConnectionInfo) *UaConnectionPool {
 	pool, ok := p.pools[deviceName]
 	if !ok {
-		p.rwMu.RLock()
-		defer p.rwMu.RUnlock()
-		pool = newConnectionPool(info, p.clientInfo)
-		p.pools[deviceName] = pool
+		p.mu.Lock()
+		defer p.mu.Unlock()
+		pool, ok = p.pools[deviceName]
+		if !ok {
+			pool = newConnectionPool(info, p.clientInfo)
+			p.pools[deviceName] = pool
+		}
 	}
 	return pool
 }

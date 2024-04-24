@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"os"
 	"reflect"
+	"sync"
 	"testing"
 
 	"github.com/edgexfoundry/device-opc-ua/internal/test"
@@ -258,6 +259,42 @@ func Benchmark_HandleReadCommands_ReuseClientWithEncryption(b *testing.B) {
 			b.Fatal(err)
 		}
 	}
+}
+
+func Benchmark_HandleReadCommands_ReuseClientAsync(b *testing.B) {
+	server := test.NewServer("../test/opcua_server.py")
+	defer server.Close()
+
+	d := initSimpleDriver()
+	deviceName := "Test"
+	protocols := map[string]models.ProtocolProperties{
+		Protocol: {
+			EndpointField:       test.Protocol + test.Address,
+			SecurityPolicyField: SecurityPolicyNone,
+			MaxPoolSizeField:    4,
+		},
+	}
+	reqs := []sdkModel.CommandRequest{{
+		DeviceResourceName: "TestVar1",
+		Attributes:         map[string]interface{}{NODE: "ns=2;s=ro_int32"},
+		Type:               common.ValueTypeInt32,
+	}}
+
+	b.ResetTimer()
+
+	n := b.N
+	wg := sync.WaitGroup{}
+	wg.Add(n)
+	for i := 0; i < n; i++ {
+		go func() {
+			_, err := d.HandleReadCommands(deviceName, protocols, reqs)
+			if err != nil {
+				panic(err)
+			}
+			wg.Done()
+		}()
+	}
+	wg.Wait()
 }
 
 func Benchmark_HandleReadCommands_ReuseClient(b *testing.B) {
