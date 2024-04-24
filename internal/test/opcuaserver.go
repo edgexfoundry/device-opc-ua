@@ -25,7 +25,6 @@
 package test
 
 import (
-	"fmt"
 	"net"
 	"os"
 	"os/exec"
@@ -88,7 +87,6 @@ func (s *Server) Run() error {
 	if len(s.ServerCertPath) == 0 || len(s.ServerPKPath) == 0 {
 		s.cmd = exec.Command(py, path)
 	} else {
-		fmt.Printf("running %v opcua_server.py %v %v\n", py, s.ServerPKPath, s.ServerCertPath)
 		s.cmd = exec.Command(py, path, s.ServerPKPath, s.ServerCertPath)
 	}
 	s.cmd.Stdout = os.Stdout

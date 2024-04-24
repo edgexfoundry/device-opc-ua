@@ -219,6 +219,47 @@ func TestDriver_HandleReadCommands(t *testing.T) {
 	}
 }
 
+func Benchmark_HandleReadCommands_ReuseClientWithEncryption(b *testing.B) {
+	certs, err := test.CreateCerts()
+	if err != nil {
+		b.Fatal(err)
+	}
+	defer test.Clean(certs)
+
+	remoteCertBytes, err := os.ReadFile(certs.ServerPEMCertPath)
+	if err != nil {
+		b.Fatal(err)
+	}
+	remoteCert := string(remoteCertBytes)
+
+	server := test.NewServer("../test/opcua_server.py", certs.ServerPKPath, certs.ServerDERCertPath)
+	defer server.Close()
+
+	d := initDriver(certs.ClientPKPath, certs.ClientPEMCertPath)
+	deviceName := "Test"
+	protocols := map[string]models.ProtocolProperties{
+		Protocol: {
+			EndpointField:       test.Protocol + test.Address,
+			SecurityPolicyField: SecurityPolicyBasic256Sha256,
+			SecurityModeField:   SecurityModeSignAndEncrypt,
+			RemotePemCertField:  remoteCert,
+		},
+	}
+	reqs := []sdkModel.CommandRequest{{
+		DeviceResourceName: "TestVar1",
+		Attributes:         map[string]interface{}{NODE: "ns=2;s=ro_int32"},
+		Type:               common.ValueTypeInt32,
+	}}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_, err = d.HandleReadCommands(deviceName, protocols, reqs)
+		if err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
 func Benchmark_HandleReadCommands_ReuseClient(b *testing.B) {
 	server := test.NewServer("../test/opcua_server.py")
 	defer server.Close()
@@ -253,7 +294,10 @@ func Benchmark_HandleReadCommands_WithoutReuseClient(b *testing.B) {
 	d := initSimpleDriver()
 	deviceName := "Test"
 	protocols := map[string]models.ProtocolProperties{
-		Protocol: {EndpointField: test.Protocol + test.Address},
+		Protocol: {
+			EndpointField:       test.Protocol + test.Address,
+			SecurityPolicyField: SecurityPolicyNone,
+		},
 	}
 	reqs := []*CommandInfo{{
 		resourceName: "TestVar1",
@@ -263,7 +307,10 @@ func Benchmark_HandleReadCommands_WithoutReuseClient(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		handleReadCommandsWithoutReuseClient(d, deviceName, protocols, reqs)
+		_, err := handleReadCommandsWithoutReuseClient(d, deviceName, protocols, reqs)
+		if err != nil {
+			b.Fatal(err)
+		}
 	}
 }
 
