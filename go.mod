@@ -4,7 +4,7 @@ go 1.21
 
 require (
 	github.com/edgexfoundry/device-sdk-go/v3 v3.2.0-dev.12
-	github.com/edgexfoundry/go-mod-core-contracts/v3 v3.2.0-dev.15
+	github.com/edgexfoundry/go-mod-core-contracts/v3 v3.2.0-dev.17
 	github.com/gopcua/opcua v0.5.3
 	github.com/spf13/cast v1.6.0
 	github.com/stretchr/testify v1.9.0
@@ -128,7 +128,7 @@ require (
 	golang.org/x/crypto v0.21.0 // indirect
 	golang.org/x/exp v0.0.0-20230817173708-d852ddb80c63 // indirect
 	golang.org/x/mod v0.12.0 // indirect
-	golang.org/x/net v0.22.0 // indirect
+	golang.org/x/net v0.23.0 // indirect
 	golang.org/x/oauth2 v0.16.0 // indirect
 	golang.org/x/sync v0.6.0 // indirect
 	golang.org/x/sys v0.18.0 // indirect
