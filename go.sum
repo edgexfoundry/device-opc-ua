@@ -92,8 +92,8 @@ github.com/edgexfoundry/go-mod-bootstrap/v3 v3.2.0-dev.32 h1:pZt+F7LQnwMRMuf3w6a
 github.com/edgexfoundry/go-mod-bootstrap/v3 v3.2.0-dev.32/go.mod h1:f6XC5nCJIXQ55xCUPJp3ClFXGkWS9hto1jIcIj9rzsA=
 github.com/edgexfoundry/go-mod-configuration/v3 v3.2.0-dev.7 h1:FTps28H9Phy/oVKJjAOdNFGVXRKXIqQo2rLQV8y5DVA=
 github.com/edgexfoundry/go-mod-configuration/v3 v3.2.0-dev.7/go.mod h1:WX+Cqr/+nXRKxNIcvekHdf5ubbTZX0D76Rj2T0FKmtA=
-github.com/edgexfoundry/go-mod-core-contracts/v3 v3.2.0-dev.20 h1:GC3Lc3Lq0uK5wf3uD3amq9owteUaqzhHvs51kZWYVKM=
-github.com/edgexfoundry/go-mod-core-contracts/v3 v3.2.0-dev.20/go.mod h1:E+Jlw/gUtzPbpgmWZLveab9f2gZcLSARgjvnG6dlhsY=
+github.com/edgexfoundry/go-mod-core-contracts/v3 v3.2.0-dev.22 h1:VpAqUI87OMpnCMN/pjQoal+MtwDVovQOnVhdvtI5StE=
+github.com/edgexfoundry/go-mod-core-contracts/v3 v3.2.0-dev.22/go.mod h1:htdoJHWR0eLeFGV6xQS6SwvSiflN537EMHLVqrSwb3I=
 github.com/edgexfoundry/go-mod-messaging/v3 v3.2.0-dev.20 h1:lNM3Bwt2s5fLjDZ49zsRyQ9bA2kDVpMifisC6US4wqM=
 github.com/edgexfoundry/go-mod-messaging/v3 v3.2.0-dev.20/go.mod h1:LREy9/8zn9t6k4fOMLCwZe/EoL1Xuy3WPnvvUEgiB1g=
 github.com/edgexfoundry/go-mod-registry/v3 v3.2.0-dev.8 h1:taE3XDACmN9zwO0hrAdZEz1GGNOyUHSgspadC9Gz6GY=
@@ -173,8 +173,8 @@ github.com/go-playground/locales v0.14.1 h1:EWaQ/wswjilfKLTECiXz7Rh+3BjFhfDFKv/o
 github.com/go-playground/locales v0.14.1/go.mod h1:hxrqLVvrK65+Rwrd5Fc6F2O76J/NuW9t0sjnWqG1slY=
 github.com/go-playground/universal-translator v0.18.1 h1:Bcnm0ZwsGyWbCzImXv+pAJnYK9S473LQFuzCbDbfSFY=
 github.com/go-playground/universal-translator v0.18.1/go.mod h1:xekY+UJKNuX9WP91TpwSH2VMlDf28Uj24BCp08ZFTUY=
-github.com/go-playground/validator/v10 v10.20.0 h1:K9ISHbSaI0lyB2eWMPJo+kOS/FBExVwjEviJTixqxL8=
-github.com/go-playground/validator/v10 v10.20.0/go.mod h1:dbuPbCMFw/DrkbEynArYaCwl3amGuJotoKCe95atGMM=
+github.com/go-playground/validator/v10 v10.21.0 h1:4fZA11ovvtkdgaeev9RGWPgc1uj3H8W+rNYyH/ySBb0=
+github.com/go-playground/validator/v10 v10.21.0/go.mod h1:dbuPbCMFw/DrkbEynArYaCwl3amGuJotoKCe95atGMM=
 github.com/go-redis/redis/v7 v7.3.0 h1:3oHqd0W7f/VLKBxeYTEpqdMUsmMectngjM9OtoRoIgg=
 github.com/go-redis/redis/v7 v7.3.0/go.mod h1:JDNMw23GTyLNC4GZu9njt15ctBQVn7xjRfnwdHj/Dcg=
 github.com/go-resty/resty/v2 v2.13.1 h1:x+LHXBI2nMB1vqndymf26quycC4aggYJ7DECYbiz03g=
