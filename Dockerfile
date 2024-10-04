@@ -2,10 +2,11 @@
 # Copyright (c) 2018, 2019 Intel
 # Copyright (c) 2021 Schneider Electric
 # Copyright (C) 2023 YIQISOFT
+# Copyright (C) 2024 IOTech Ltd
 #
 # SPDX-License-Identifier: Apache-2.0
 #
-FROM golang:1.21-alpine3.18 AS builder
+FROM golang:1.23-alpine3.20 AS builder
 WORKDIR /device-opcua
 
 # Install our build time packages.
@@ -16,7 +17,7 @@ COPY . .
 RUN make build
 
 # Next image - Copy built Go binary into new workspace
-FROM alpine:3.18
+FROM alpine:3.20
 LABEL license='SPDX-License-Identifier: Apache-2.0' \
   copyright='Copyright (c) 2023: YIQISOFT'
 
