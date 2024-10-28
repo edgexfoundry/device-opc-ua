@@ -220,6 +220,54 @@ func TestDriver_HandleReadCommands(t *testing.T) {
 	}
 }
 
+func Benchmark_HandleReadCommands_ReuseClientWithEncryptionAsync(b *testing.B) {
+	certs, err := test.CreateCerts()
+	if err != nil {
+		b.Fatal(err)
+	}
+	defer test.Clean(certs)
+
+	remoteCertBytes, err := os.ReadFile(certs.ServerPEMCertPath)
+	if err != nil {
+		b.Fatal(err)
+	}
+	remoteCert := string(remoteCertBytes)
+
+	deviceName := "Test"
+	protocols := map[string]models.ProtocolProperties{
+		Protocol: {
+			EndpointField:       test.Protocol + test.Address,
+			SecurityPolicyField: SecurityPolicyBasic256Sha256,
+			SecurityModeField:   SecurityModeSignAndEncrypt,
+			RemotePemCertField:  remoteCert,
+			MaxPoolSizeField:    4,
+		},
+	}
+	reqs := []sdkModel.CommandRequest{{
+		DeviceResourceName: "TestVar1",
+		Attributes:         map[string]interface{}{NODE: "ns=2;s=ro_int32"},
+		Type:               common.ValueTypeInt32,
+	}}
+
+	server := test.NewServer("../test/opcua_server.py", certs.ServerPKPath, certs.ServerDERCertPath)
+	defer server.Close()
+	d := initDriver(certs.ClientPKPath, certs.ClientPEMCertPath)
+	b.ResetTimer()
+	n := b.N
+	wg := sync.WaitGroup{}
+	wg.Add(n)
+	for i := 0; i < n; i++ {
+		go func() {
+			_, err = d.HandleReadCommands(deviceName, protocols, reqs)
+			if err != nil {
+				panic(err)
+			}
+			wg.Done()
+		}()
+	}
+	wg.Wait()
+}
+
 func Benchmark_HandleReadCommands_ReuseClientWithEncryption(b *testing.B) {
 	certs, err := test.CreateCerts()
 	if err != nil {

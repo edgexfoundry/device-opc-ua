@@ -62,7 +62,7 @@ func (d *Driver) Initialize(sdk interfaces.DeviceServiceSDK) error {
 	d.Logger.Debugf("Custom config is: %v", d.serviceConfig)
 
 	if err := sdk.ListenForCustomConfigChanges(&d.serviceConfig.OPCUAServer, CustomConfigSectionName, d.updateClientInfo); err != nil {
-		return errors.NewCommonEdgeX(errors.Kind(err), fmt.Sprintf("unable to listen for changes for '%s' custom configuration", WritableInfoSectionName), err)
+		return errors.NewCommonEdgeX(errors.Kind(err), fmt.Sprintf("unable to listen for changes for '%s' custom configuration", CustomConfigSectionName), err)
 	}
 
 	// Initialize ua connection pool

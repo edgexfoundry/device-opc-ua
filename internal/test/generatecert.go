@@ -239,6 +239,7 @@ func createTemplate(subjectAltName []string, subj pkix.Name, addresses []net.IP,
 			Critical: false,
 			Value:    []byte(strings.Join(subjectAltName, ", ")),
 		}
+		// SAN should be set on "Extensions" field instead of "ExtraExtensions" field
 		template.Extensions = []pkix.Extension{extension}
 	}
 	return template
