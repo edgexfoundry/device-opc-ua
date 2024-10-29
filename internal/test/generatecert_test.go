@@ -23,7 +23,7 @@ import (
 
 func Test_DropFile(t *testing.T) {
 	t.Run("Drop File", func(t *testing.T) {
-		_ = dropFile("/Users/shenglong/repo/device-opc-ua/internal/test/server_pk.pem")
+		_ = dropFile("/Volumes/ext/project/repo/device-opc-ua/internal/test/server_pk.pem")
 	})
 }
 

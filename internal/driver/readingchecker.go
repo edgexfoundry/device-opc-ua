@@ -100,7 +100,7 @@ func newResult(req *CommandInfo, reading interface{}) (*sdkModel.CommandValue, e
 	if err != nil {
 		return nil, err
 	}
-	result.Origin = time.Now().UnixNano() / int64(time.Millisecond)
+	result.Origin = time.Now().UnixNano()
 
 	return result, err
 }

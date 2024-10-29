@@ -37,12 +37,24 @@ type DeviceServiceSdk struct {
 }
 
 func NewDeviceSdk() interfaces.DeviceServiceSDK {
-	dss := &DeviceServiceSdk{
+	dss := DeviceServiceSdk{
 		devices:     make(map[string]models.Device),
 		profiles:    make(map[string]models.DeviceProfile),
 		asyncValues: make(chan *sdkModels.AsyncValues),
 	}
-	return interfaces.DeviceServiceSDK(dss)
+	return interfaces.DeviceServiceSDK(&dss)
+}
+
+func (dss *DeviceServiceSdk) PublishDeviceDiscoveryProgressSystemEvent(progress, discoveredDeviceCount int, message string) {
+
+}
+
+func (dss *DeviceServiceSdk) PublishGenericSystemEvent(eventType, action string, details any) {
+
+}
+
+func (dss *DeviceServiceSdk) PublishProfileScanProgressSystemEvent(reqId string, progress int, message string) {
+
 }
 
 func (dss *DeviceServiceSdk) AddDevice(device models.Device) (string, error) {
