@@ -12,7 +12,7 @@ package main
 import (
 	device_opcua "github.com/edgexfoundry/device-opc-ua"
 	"github.com/edgexfoundry/device-opc-ua/internal/driver"
-	"github.com/edgexfoundry/device-sdk-go/v3/pkg/startup"
+	"github.com/edgexfoundry/device-sdk-go/v4/pkg/startup"
 )
 
 const (

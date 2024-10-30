@@ -10,7 +10,7 @@ package driver
 import (
 	"testing"
 
-	"github.com/edgexfoundry/go-mod-core-contracts/v3/models"
+	"github.com/edgexfoundry/go-mod-core-contracts/v4/models"
 )
 
 func TestOPCUAServerConfig_Validate(t *testing.T) {
