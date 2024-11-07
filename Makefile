@@ -17,18 +17,19 @@ SDKVERSION=$(shell cat ./go.mod | grep 'github.com/edgexfoundry/device-sdk-go/v4
 
 DOCKER_TAG=$(VERSION)-dev
 
+ifeq ($(ENABLE_FULL_RELRO), true)
+	ENABLE_FULL_RELRO_GOFLAGS = -bindnow
+endif
+
 GOFLAGS=-ldflags "-X github.com/edgexfoundry/device-opc-ua.Version=$(VERSION) \
-                  -X github.com/edgexfoundry/device-sdk-go/v4/internal/common.SDKVersion=$(SDKVERSION)" \
+                  -X github.com/edgexfoundry/device-sdk-go/v4/internal/common.SDKVersion=$(SDKVERSION) \
+                  $(ENABLE_FULL_RELRO_GOFLAGS)" \
                    -trimpath -mod=readonly
 GOTESTFLAGS?=-race
 
 GIT_SHA=$(shell git rev-parse HEAD)
 
 TEST_OUT=test-artifacts
-
-ifeq ($(ENABLE_FULL_RELRO), "true")
-	GOFLAGS += -ldflags "-bindnow"
-endif
 
 ifeq ($(ENABLE_PIE), "true")
 	GOFLAGS += -buildmode=pie
