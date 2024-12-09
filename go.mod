@@ -5,7 +5,7 @@ go 1.23
 require (
 	github.com/edgexfoundry/device-sdk-go/v4 v4.0.0-dev.1
 	github.com/edgexfoundry/go-mod-core-contracts/v4 v4.0.0-dev.2
-	github.com/gopcua/opcua v0.5.3
+	github.com/gopcua/opcua v0.6.0
 	github.com/spf13/cast v1.7.0
 	github.com/stretchr/testify v1.9.0
 
