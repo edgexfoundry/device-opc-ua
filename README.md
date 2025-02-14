@@ -41,8 +41,6 @@ Modify [configuration.yaml](./cmd/res/configuration.yaml) file found under the `
 
 Define devices for device-sdk to auto upload device profile and create device instance. Please modify [Simple_Devices.yaml](./cmd/res/devices/Simple-Devices.yaml) file found under the `./cmd/res/devices` folder.
 
-> This device service is currently limited to a single device instance.
-
 ### Device Profile
 
 A Device Profile can be thought of as a template of a type or classification of a Device.
