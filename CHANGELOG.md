@@ -17,7 +17,6 @@
 - Enable PIE support for ASLR and full RELRO ([f4576cb…](https://github.com/edgexfoundry/device-opc-ua/commit/f4576cb6e730d5cb56728cd5301c3469e6700745))
 - Support reuse of the opcua.Client ([#48](https://github.com/edgexfoundry/device-opc-ua/issues/48)) ([0652287…](https://github.com/edgexfoundry/device-opc-ua/commit/0652287e7ffe2b31c8f997123275b50b3773b654))
 
-
 ### ♻ Code Refactoring
 
 - Update module to v4 ([78189af…](https://github.com/edgexfoundry/device-opc-ua/commit/78189afc06e4f293a751a0d27007109e12aff490))
@@ -34,11 +33,9 @@ BREAKING CHANGE: update go module to v4
 - Retention failure ([#54](https://github.com/edgexfoundry/device-opc-ua/issues/54)) ([ebc1033…](https://github.com/edgexfoundry/device-opc-ua/commit/ebc1033c4e999d7351c7388ead58caee164ca851))
 - Change go mod name to device-opc-ua ([11f2cd1…](https://github.com/edgexfoundry/device-opc-ua/commit/11f2cd1c89942d99ef8344c9c8430f1263f63267))
 
-
 ### 👷 Build
 
 - Upgrade to go-1.23 and Alpine 3.20 ([59a52fd…](https://github.com/edgexfoundry/device-opc-ua/commit/59a52fd5833a6e42fe3b7b3e47a5549daf0b54c2))
-
 
 ### 🤖 Continuous Integration
 
