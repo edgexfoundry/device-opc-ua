@@ -5,7 +5,7 @@ go 1.23
 require (
 	github.com/edgexfoundry/device-sdk-go/v4 v4.0.0-dev.26
 	github.com/edgexfoundry/go-mod-core-contracts/v4 v4.0.0-dev.30
-	github.com/gopcua/opcua v0.5.3
+	github.com/gopcua/opcua v0.7.1
 	github.com/spf13/cast v1.7.1
 	github.com/stretchr/testify v1.10.0
 
@@ -112,7 +112,7 @@ require (
 	go.opentelemetry.io/otel/metric v1.32.0 // indirect
 	go.opentelemetry.io/otel/trace v1.32.0 // indirect
 	golang.org/x/crypto v0.33.0 // indirect
-	golang.org/x/exp v0.0.0-20230817173708-d852ddb80c63 // indirect
+	golang.org/x/exp v0.0.0-20241204233417-43b7b7cde48d // indirect
 	golang.org/x/net v0.35.0 // indirect
 	golang.org/x/oauth2 v0.25.0 // indirect
 	golang.org/x/sync v0.11.0 // indirect
