@@ -121,7 +121,10 @@ func (d *Driver) getClient(device models.Device) (*opcua.Client, error) {
 	if err != nil {
 		return nil, err
 	}
-	ep := opcua.SelectEndpoint(endpoints, policy, ua.MessageSecurityModeFromString(mode))
+	ep, err := opcua.SelectEndpoint(endpoints, policy, ua.MessageSecurityModeFromString(mode))
+	if err != nil {
+		return nil, err
+	}
 	if ep == nil {
 		return nil, fmt.Errorf("[Incoming listener] Failed to find suitable endpoint")
 	}
