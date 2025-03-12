@@ -2,7 +2,7 @@
 *.log
 cmd/device-opcua
 cmd/device-opcua-arm64
-vendor
+/vendor/
 .idea
 test-artifacts
 VERSION
