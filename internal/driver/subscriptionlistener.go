@@ -53,7 +53,9 @@ func (d *Driver) startSubscriptionListener() error {
 		d.Logger.Warnf("[Incoming listener] Failed to connect OPCUA client, %s", err)
 		return err
 	}
-	defer client.Close(ctx)
+	defer func(client *opcua.Client, ctx context.Context) {
+		_ = client.Close(ctx)
+	}(client, ctx)
 
 	notifyCh := make(chan *opcua.PublishNotificationData)
 	sub, err := client.Subscribe(ctx, &opcua.SubscriptionParameters{
@@ -62,7 +64,9 @@ func (d *Driver) startSubscriptionListener() error {
 	if err != nil {
 		return err
 	}
-	defer sub.Cancel(ctx)
+	defer func(sub *opcua.Subscription, ctx context.Context) {
+		_ = sub.Cancel(ctx)
+	}(sub, ctx)
 
 	if err := d.configureMonitoredItems(sub, resources, deviceName); err != nil {
 		return err

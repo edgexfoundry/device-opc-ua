@@ -120,6 +120,6 @@ func (s *Server) Close() error {
 	if s.cmd == nil {
 		return errors.Errorf("not running")
 	}
-	go func() { s.cmd.Process.Kill() }()
+	go func() { _ = s.cmd.Process.Kill() }()
 	return <-s.waitch
 }
