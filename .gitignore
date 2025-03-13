@@ -6,3 +6,5 @@ cmd/device-opcua-arm64
 .idea
 test-artifacts
 VERSION
+
+coverage.out

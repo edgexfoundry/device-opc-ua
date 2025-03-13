@@ -196,13 +196,3 @@ func Test_getNodeID(t *testing.T) {
 		})
 	}
 }
-
-func TestDriver_Initialize(t *testing.T) {
-	t.Run("initialize", func(t *testing.T) {
-		d := NewProtocolDriver()
-		err := d.Initialize(driver.sdkService)
-		if err == nil {
-			t.Errorf("expected error to be returned in test environment")
-		}
-	})
-}

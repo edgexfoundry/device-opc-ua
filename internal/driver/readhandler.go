@@ -57,7 +57,7 @@ func (d *Driver) processReadCommands(client *opcua.Client, reqs []sdkModel.Comma
 }
 
 func (d *Driver) handleReadCommandRequest(deviceClient *opcua.Client, req sdkModel.CommandRequest) (*sdkModel.CommandValue, error) {
-	var result = &sdkModel.CommandValue{}
+	var result *sdkModel.CommandValue
 	var err error
 
 	_, isMethod := req.Attributes[METHOD]
