@@ -1,0 +1,15 @@
+# yaml-language-server: $schema=https://goreleaser.com/static/schema.json
+
+version: 2
+
+# no binaries to build
+builds:
+  -
+    skip: true
+checksum:
+changelog:
+  sort: asc
+  filters:
+    exclude:
+    - '^docs:'
+    - '^test:'
