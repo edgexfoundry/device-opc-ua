@@ -3,11 +3,11 @@ module github.com/edgexfoundry/device-opc-ua
 go 1.23.7
 
 require (
-	github.com/edgexfoundry/device-sdk-go/v4 v4.1.0-dev.31
+	github.com/edgexfoundry/device-sdk-go/v4 v4.1.0-dev.34
 	github.com/edgexfoundry/go-mod-core-contracts/v4 v4.1.0-dev.12
 	github.com/gopcua/opcua v0.8.0
 	github.com/spf13/cast v1.9.2
-	github.com/stretchr/testify v1.11.0
+	github.com/stretchr/testify v1.11.1
 )
 
 require (
@@ -17,7 +17,7 @@ require (
 	github.com/cenkalti/backoff/v4 v4.3.0 // indirect
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
 	github.com/eclipse/paho.mqtt.golang v1.5.0 // indirect
-	github.com/edgexfoundry/go-mod-bootstrap/v4 v4.1.0-dev.30 // indirect
+	github.com/edgexfoundry/go-mod-bootstrap/v4 v4.1.0-dev.32 // indirect
 	github.com/edgexfoundry/go-mod-configuration/v4 v4.1.0-dev.12 // indirect
 	github.com/edgexfoundry/go-mod-messaging/v4 v4.1.0-dev.13 // indirect
 	github.com/edgexfoundry/go-mod-registry/v4 v4.1.0-dev.4 // indirect
