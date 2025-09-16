@@ -3,7 +3,7 @@ module github.com/edgexfoundry/device-opc-ua
 go 1.23.7
 
 require (
-	github.com/edgexfoundry/device-sdk-go/v4 v4.1.0-dev.36
+	github.com/edgexfoundry/device-sdk-go/v4 v4.1.0-dev.38
 	github.com/edgexfoundry/go-mod-core-contracts/v4 v4.1.0-dev.12
 	github.com/gopcua/opcua v0.8.0
 	github.com/spf13/cast v1.10.0
