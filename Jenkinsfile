@@ -15,5 +15,6 @@
 //
 
 edgeXBuildGoApp (
-    project: 'device-opc-ua'
+    project: 'device-opc-ua',
+    goVersion: '1.23'
 )
