@@ -168,7 +168,7 @@ func (d *Driver) configureMonitoredItems(sub *opcua.Subscription, resources, dev
 		}
 
 		// arbitrary client handle for the monitoring item
-		handle := uint32(i + 42)
+		handle := uint32(i + 42) // #nosec G115
 		// map the client handle so we know what the value returned represents
 		d.resourceMap[handle] = node
 		miCreateRequest := opcua.NewMonitoredItemCreateRequestWithDefaults(id, ua.AttributeIDValue, handle)
