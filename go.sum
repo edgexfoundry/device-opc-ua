@@ -72,10 +72,10 @@ github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc h1:U9qPSI2PIWSS1
 github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
 github.com/eclipse/paho.mqtt.golang v1.5.1 h1:/VSOv3oDLlpqR2Epjn1Q7b2bSTplJIeV2ISgCl2W7nE=
 github.com/eclipse/paho.mqtt.golang v1.5.1/go.mod h1:1/yJCneuyOoCOzKSsOTUc0AJfpsItBGWvYpBLimhArU=
-github.com/edgexfoundry/device-sdk-go/v4 v4.1.0-dev.57 h1:V4U924En5J0p+6VDHESuibJKQLy9qNeS7SNJnv1mYNM=
-github.com/edgexfoundry/device-sdk-go/v4 v4.1.0-dev.57/go.mod h1:PtH2k7S351XTHij13F7538+xLtdfaPCHuBuvvyh4y7M=
-github.com/edgexfoundry/go-mod-bootstrap/v4 v4.1.0-dev.56 h1:7vqfinSSJBkzdaG6gtTIZma3YtoUjAMFD9jNP7F0/hM=
-github.com/edgexfoundry/go-mod-bootstrap/v4 v4.1.0-dev.56/go.mod h1:SkrRqHeRxwKK70eKKwHoUlHyqcj2Kb4dQ+vjdKJYQUE=
+github.com/edgexfoundry/device-sdk-go/v4 v4.1.0-dev.58 h1:CX1cvaBAwD58MnO12QTThWDBhvJSxGn0XO8sdv89c5A=
+github.com/edgexfoundry/device-sdk-go/v4 v4.1.0-dev.58/go.mod h1:BGI++R7cEVAbEDrDu0PYpSMVpLztSwB4NGKJhFeXwUk=
+github.com/edgexfoundry/go-mod-bootstrap/v4 v4.1.0-dev.58 h1:PBJ5/kQyLHdiqBFRl1T/F86TD9xCq1qeK/vZxnadPyM=
+github.com/edgexfoundry/go-mod-bootstrap/v4 v4.1.0-dev.58/go.mod h1:xjoCHCyUs9SCamIeezNKi1MJyGDZqF1OD1hK+O6F3No=
 github.com/edgexfoundry/go-mod-configuration/v4 v4.1.0-dev.17 h1:TttwsEqLppEQQz4scPbEdzMtsHC8vj1djd2sgZLfny8=
 github.com/edgexfoundry/go-mod-configuration/v4 v4.1.0-dev.17/go.mod h1:IlEPPn0CZX1mDBRX8E6nr7BM/MVxMZV5z9zSTo6fUgo=
 github.com/edgexfoundry/go-mod-core-contracts/v4 v4.1.0-dev.28 h1:sp+a3CiNVqLcZ/zBqG2JZL4UOAdvF5sGAYiCwpJbDAo=
@@ -84,8 +84,8 @@ github.com/edgexfoundry/go-mod-messaging/v4 v4.1.0-dev.18 h1:iLlwJBZewKcoL+Ao4HQ
 github.com/edgexfoundry/go-mod-messaging/v4 v4.1.0-dev.18/go.mod h1:PcyJ06iPZfWH88+4Mmk8IJI2pDDclwdwI883wKoKocM=
 github.com/edgexfoundry/go-mod-registry/v4 v4.1.0-dev.8 h1:swAEoWn8rr/NXcsBaCxoY+lWSiDUfZUmTyBsi9aM/7o=
 github.com/edgexfoundry/go-mod-registry/v4 v4.1.0-dev.8/go.mod h1:nWbISfwYXzhOHPZ7AyEsxXrCujxzSBZi8/yjSbCgkMc=
-github.com/edgexfoundry/go-mod-secrets/v4 v4.1.0-dev.9 h1:aWN1/Fk2hieYSW7ReyCLnpJMkquiPQ16Jp5Ky5GKdWo=
-github.com/edgexfoundry/go-mod-secrets/v4 v4.1.0-dev.9/go.mod h1:ZyCWYrafLT5Ay50MCvkjwAiwoZr6dI2vusWUfbELuvs=
+github.com/edgexfoundry/go-mod-secrets/v4 v4.1.0-dev.10 h1:iTDW0jx9M+AJb1nu4c3yC6nvZzFoizyUuenobp6f3BE=
+github.com/edgexfoundry/go-mod-secrets/v4 v4.1.0-dev.10/go.mod h1:eaZYjh2yrcx22Byl4P1GR3ZRhINaInp88lAa32qXfvM=
 github.com/emirpasic/gods v1.18.1 h1:FXtiHYKDGKCW2KzwZKx0iC0PQmdlorYgdFG9jPXJ1Bc=
 github.com/emirpasic/gods v1.18.1/go.mod h1:8tpGGwCnJ5H4r6BWwaV6OrWmMoPhUl5jm/FMNAnJvWQ=
 github.com/envoyproxy/go-control-plane v0.9.0/go.mod h1:YTl/9mNaCwkRvm6d1a2C3ymFceY/DCBVvsKhRF0iEA4=
