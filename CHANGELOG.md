@@ -10,6 +10,13 @@
 - [go-mod-secrets](https://github.com/edgexfoundry/go-mod-secrets/blob/main/CHANGELOG.md) (indirect dependency)
 - [go-mod-configuration](https://github.com/edgexfoundry/go-mod-configuration/blob/main/CHANGELOG.md) (indirect dependency)
 
+## [4.0.2] - 2026-05-31 
+
+### 👷 Build 
+- Update goVersion to 1.25 and golangci-lint to 2.5.0([#6fd1174](https://github.com/edgexfoundry/device-onvif-camera/commits/6fd1174))
+
+
+
 ## [4.0.0] Odessa - 2025-03-12 (Only compatible with the 4.x releases)
 
 ### ✨ Features
