@@ -56,15 +56,16 @@ func TestDriver_AddDevice(t *testing.T) {
 	}{
 		{
 			name:    "OK - device add success",
-			args:    args{deviceName: "Test"},
+			args:    args{deviceName: "Test", protocols: endpointProtocols("opc.tcp://plc:4840")},
 			wantErr: false,
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			d := NewProtocolDriver().(*Driver)
-			d.Logger = &logger.MockLogger{}
-			d.serviceConfig = &ServiceConfig{OPCUAServer: OPCUAServerConfig{DeviceName: tt.args.deviceName}}
+			d := &Driver{
+				Logger:        &logger.MockLogger{},
+				serviceConfig: &ServiceConfig{OPCUAServer: OPCUAServerConfig{DeviceName: tt.args.deviceName, Policy: "None", Mode: "None"}},
+			}
 			if err := d.AddDevice(tt.args.deviceName, tt.args.protocols, tt.args.adminState); (err != nil) != tt.wantErr {
 				t.Errorf("Driver.AddDevice() error = %v, wantErr %v", err, tt.wantErr)
 			}
@@ -85,14 +86,15 @@ func TestDriver_UpdateDevice(t *testing.T) {
 	}{
 		{
 			name:    "OK - device update success",
-			args:    args{deviceName: "Test"},
+			args:    args{deviceName: "Test", protocols: endpointProtocols("opc.tcp://plc:4840")},
 			wantErr: false,
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			d := &Driver{
-				Logger: &logger.MockLogger{},
+				Logger:        &logger.MockLogger{},
+				serviceConfig: &ServiceConfig{OPCUAServer: OPCUAServerConfig{Policy: "None", Mode: "None"}},
 			}
 			if err := d.UpdateDevice(tt.args.deviceName, tt.args.protocols, tt.args.adminState); (err != nil) != tt.wantErr {
 				t.Errorf("Driver.UpdateDevice() error = %v, wantErr %v", err, tt.wantErr)

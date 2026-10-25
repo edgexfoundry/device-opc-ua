@@ -25,19 +25,18 @@ func (d *Driver) HandleReadCommands(deviceName string, protocols map[string]mode
 
 	d.Logger.Debugf("Driver.HandleReadCommands: protocols: %v resource: %v attributes: %v", protocols, reqs[0].DeviceResourceName, reqs[0].Attributes)
 
-	// create device client and open connection
-	endpoint, err := FetchEndpoint(protocols)
-	if err != nil {
-		return nil, err
-	}
-
-	client, cliErr := d.buildClient(context.Background(), endpoint)
+	client, key, cliErr := d.acquireClient(context.Background(), deviceName, protocols)
 	if cliErr != nil {
-		d.Logger.Warnf("Driver.HandleReadCommands: Failed to connect OPCUA client, %s", err)
+		d.Logger.Warnf("Driver.HandleReadCommands: Failed to connect OPCUA client, %s", cliErr)
 		return nil, cliErr
 	}
+	defer d.endUse(key)
 
-	return d.processReadCommands(client, reqs)
+	responses, err := d.processReadCommands(client, reqs)
+	if isTransportError(err) {
+		d.dropSession(key)
+	}
+	return responses, err
 }
 
 func (d *Driver) processReadCommands(client *opcua.Client, reqs []sdkModel.CommandRequest) ([]*sdkModel.CommandValue, error) {
@@ -95,7 +94,7 @@ func makeReadRequest(deviceClient *opcua.Client, req sdkModel.CommandRequest) (*
 	ctx := context.Background()
 	resp, err := deviceClient.Read(ctx, request)
 	if err != nil {
-		return nil, fmt.Errorf("Driver.handleReadCommands: Read failed: %s", err)
+		return nil, transportFailure(fmt.Errorf("Driver.handleReadCommands: Read failed: %s", err))
 	}
 	if resp.Results[0].Status != ua.StatusOK {
 		return nil, fmt.Errorf("Driver.handleReadCommands: Status not OK: %v", resp.Results[0].Status)
@@ -147,7 +146,7 @@ func makeMethodCall(deviceClient *opcua.Client, req sdkModel.CommandRequest) (*s
 	ctx := context.Background()
 	resp, err := deviceClient.Call(ctx, request)
 	if err != nil {
-		return nil, fmt.Errorf("Driver.handleReadCommands: Method call failed: %s", err)
+		return nil, transportFailure(fmt.Errorf("Driver.handleReadCommands: Method call failed: %s", err))
 	}
 	if resp.StatusCode != ua.StatusOK {
 		return nil, fmt.Errorf("Driver.handleReadCommands: Method status not OK: %v", resp.StatusCode)

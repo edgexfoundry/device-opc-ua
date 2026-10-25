@@ -194,8 +194,9 @@ func Benchmark_HandleReadCommands_ReuseClient(b *testing.B) {
 	defer server.Close()
 
 	d := &Driver{
-		Logger:    &logger.MockLogger{},
-		clientMap: map[string]*opcua.Client{},
+		Logger:        &logger.MockLogger{},
+		serviceConfig: &ServiceConfig{OPCUAServer: OPCUAServerConfig{Policy: "None", Mode: "None"}},
+		clients:       map[string]*clientSlot{},
 	}
 	deviceName := "Test"
 	protocols := map[string]models.ProtocolProperties{
@@ -221,8 +222,9 @@ func Benchmark_HandleReadCommands_WithoutReuseClient(b *testing.B) {
 	defer server.Close()
 
 	d := &Driver{
-		Logger:    &logger.MockLogger{},
-		clientMap: map[string]*opcua.Client{},
+		Logger:        &logger.MockLogger{},
+		serviceConfig: &ServiceConfig{OPCUAServer: OPCUAServerConfig{Policy: "None", Mode: "None"}},
+		clients:       map[string]*clientSlot{},
 	}
 	deviceName := "Test"
 	protocols := map[string]models.ProtocolProperties{

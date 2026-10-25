@@ -31,4 +31,16 @@ const (
 	Protocol = "opcua"
 	// Endpoint is a constant string
 	Endpoint = "Endpoint"
+	// Policy overrides OPCUAServer.Policy for this device when set.
+	Policy = "Policy"
+	// Mode overrides OPCUAServer.Mode for this device when set.
+	Mode = "Mode"
+	// SecretName is the secret-store path whose keys are username and password.
+	// Empty means an anonymous session.
+	SecretName = "SecretName"
+)
+
+const (
+	usernameKey = "username"
+	passwordKey = "password"
 )

@@ -21,6 +21,45 @@ This repository is a Go-based EdgeX Foundry Device Service which uses OPC-UA pro
 2. Execute read command
 3. Execute write command
 4. Execute method (using Read command of device SDK)
+5. Username/password authentication per device, or anonymous when no secret is set
+
+## Username and password
+
+Each device may set optional `opcua` protocol properties `Policy`, `Mode`, and `SecretName`.
+
+- Missing `Policy` or `Mode` uses `OPCUAServer.Policy` and `OPCUAServer.Mode`.
+- Missing `SecretName` keeps an anonymous session.
+- `SecretName` is passed to `SecretProvider.GetSecret`. The secret keys are `username` and `password`. Do not put the password in the device definition.
+
+Devices that share the same endpoint, policy, mode, and secret name share one OPC UA session. Read, write, and subscribe use that session. The subscription listener cancels its subscription and does not close the client. The session is closed when the last device releases it, when the service stops, or after a transport error. A bad status on one node does not close the session. Removing one device does not close a session that another device still holds.
+
+`Policy` or `Mode` other than `None` requires `OPCUAServer.CertFile` and `OPCUAServer.KeyFile`. A server may reject a username token on security policy `None`.
+
+```yaml
+protocols:
+  opcua:
+    Endpoint: "opc.tcp://192.0.2.20:4840"
+    Policy: "Basic256Sha256"
+    Mode: "SignAndEncrypt"
+    SecretName: "opcua/plc-1"
+```
+
+Store the secret through the device service. In secure mode only this service can read it back:
+
+```
+POST /api/v3/secret
+```
+
+```json
+{
+  "apiVersion": "v3",
+  "secretName": "opcua/plc-1",
+  "secretData": [
+    {"key": "username", "value": "alice"},
+    {"key": "password", "value": "secret"}
+  ]
+}
+```
 
 ## Prerequisites
 

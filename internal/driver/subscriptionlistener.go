@@ -16,7 +16,6 @@ import (
 	"time"
 
 	sdkModels "github.com/edgexfoundry/device-sdk-go/v4/pkg/models"
-	"github.com/edgexfoundry/go-mod-core-contracts/v4/models"
 	"github.com/gopcua/opcua"
 	"github.com/gopcua/opcua/ua"
 )
@@ -44,18 +43,14 @@ func (d *Driver) startSubscriptionListener() error {
 		return err
 	}
 
-	client, err := d.getClient(device)
+	// The listener shares the read/write session. endUse releases the in-flight
+	// count. Client.Close stays with the device refcount and with Stop.
+	client, key, err := d.acquireClient(ctx, deviceName, device.Protocols)
 	if err != nil {
-		return err
-	}
-
-	if err := client.Connect(ctx); err != nil {
 		d.Logger.Warnf("[Incoming listener] Failed to connect OPCUA client, %s", err)
 		return err
 	}
-	defer func(client *opcua.Client, ctx context.Context) {
-		_ = client.Close(ctx)
-	}(client, ctx)
+	defer d.endUse(key)
 
 	notifyCh := make(chan *opcua.PublishNotificationData)
 	sub, err := client.Subscribe(ctx, &opcua.SubscriptionParameters{
@@ -105,45 +100,6 @@ func (d *Driver) startSubscriptionListener() error {
 			}
 		}
 	}
-}
-
-func (d *Driver) getClient(device models.Device) (*opcua.Client, error) {
-	var (
-		policy   = d.serviceConfig.OPCUAServer.Policy
-		mode     = d.serviceConfig.OPCUAServer.Mode
-		certFile = d.serviceConfig.OPCUAServer.CertFile
-		keyFile  = d.serviceConfig.OPCUAServer.KeyFile
-	)
-
-	endpoint, xerr := FetchEndpoint(device.Protocols)
-	if xerr != nil {
-		return nil, xerr
-	}
-
-	ctx := context.Background()
-	endpoints, err := opcua.GetEndpoints(ctx, endpoint)
-	if err != nil {
-		return nil, err
-	}
-	ep, err := opcua.SelectEndpoint(endpoints, policy, ua.MessageSecurityModeFromString(mode))
-	if err != nil {
-		return nil, err
-	}
-	if ep == nil {
-		return nil, fmt.Errorf("[Incoming listener] Failed to find suitable endpoint")
-	}
-	ep.EndpointURL = endpoint
-
-	opts := []opcua.Option{
-		opcua.SecurityPolicy(policy),
-		opcua.SecurityModeString(mode),
-		opcua.CertificateFile(certFile),
-		opcua.PrivateKeyFile(keyFile),
-		opcua.AuthAnonymous(),
-		opcua.SecurityFromEndpoint(ep, ua.UserTokenTypeAnonymous),
-	}
-
-	return opcua.NewClient(ep.EndpointURL, opts...)
 }
 
 func (d *Driver) configureMonitoredItems(sub *opcua.Subscription, resources, deviceName string) error {
