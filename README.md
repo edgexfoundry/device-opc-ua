@@ -31,7 +31,7 @@ Each device may set optional `opcua` protocol properties `Policy`, `Mode`, and `
 - Missing `SecretName` keeps an anonymous session.
 - `SecretName` is passed to `SecretProvider.GetSecret`. The secret keys are `username` and `password`. Do not put the password in the device definition.
 
-Devices that share the same endpoint, policy, mode, and secret name share one OPC UA session. Read, write, and subscribe use that session. The subscription listener cancels its subscription and does not close the client. The session is closed when the last device releases it, when the service stops, or after a transport error. A bad status on one node does not close the session. Removing one device does not close a session that another device still holds.
+Devices that share the same endpoint, policy, mode, and secret name share one OPC UA session. Read, write, and subscribe use that session. The subscription listener cancels its subscription and does not close the client. A transport error on that subscription drops the session, and the listener dials again. The session is closed when the last device releases it, when the service stops, or after a transport error. A bad status on one node does not close the session. Removing one device does not close a session that another device still holds.
 
 `Policy` or `Mode` other than `None` requires `OPCUAServer.CertFile` and `OPCUAServer.KeyFile`. A server may reject a username token on security policy `None`.
 

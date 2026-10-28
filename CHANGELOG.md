@@ -20,6 +20,10 @@
   that omits it stays anonymous. One session is shared per endpoint, policy,
   mode, and secret name, and it closes when the last device releases it or
   when the service stops.
+- A present non-string `Policy`, `Mode`, or `SecretName` is rejected. Each
+  transport failure retires that session, including one dialed while an older
+  session is still in use. The subscription listener drops the failed session
+  and dials again. A bad monitored-item status does not.
 
 ## [4.0.2] - 2026-05-31 
 

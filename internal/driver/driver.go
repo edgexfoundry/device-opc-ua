@@ -13,6 +13,7 @@ import (
 	"context"
 	"fmt"
 	"sync"
+	"time"
 
 	"github.com/edgexfoundry/device-sdk-go/v4/pkg/interfaces"
 	sdkModel "github.com/edgexfoundry/device-sdk-go/v4/pkg/models"
@@ -95,11 +96,51 @@ func (d *Driver) updateWritableConfig(rawWritableConfig interface{}) {
 	go d.startSubscriber()
 }
 
-// Start or restart the subscription listener
+// Start or restart the subscription listener.
+// A transport failure drops the shared session and dials again. A configuration
+// error stops the listener. cleanup cancels the context and ends the retry.
 func (d *Driver) startSubscriber() {
-	err := d.startSubscriptionListener()
-	if err != nil {
+	resources := ""
+	if d.serviceConfig != nil {
+		resources = d.serviceConfig.OPCUAServer.Writable.Resources
+	}
+	if len(resources) == 0 {
+		d.Logger.Info("[Incoming listener] No resources defined to generate subscriptions.")
+		return
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	if d.ctxCancel != nil {
+		d.ctxCancel()
+	}
+	d.ctxCancel = cancel
+
+	backoff := time.Second
+	for {
+		err := d.startSubscriptionListener(ctx)
+		if err == nil || ctx.Err() != nil {
+			return
+		}
 		d.Logger.Errorf("Driver.Initialize: Start incoming data Listener failed: %v", err)
+		if isPermanentListenerError(err) {
+			return
+		}
+		d.mu.Lock()
+		stopped := d.stopped
+		d.mu.Unlock()
+		if stopped {
+			return
+		}
+		timer := time.NewTimer(backoff)
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+			return
+		case <-timer.C:
+		}
+		if backoff < 30*time.Second {
+			backoff *= 2
+		}
 	}
 }
 

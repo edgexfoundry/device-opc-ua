@@ -50,7 +50,7 @@ func (s sessionInfo) Key() string {
 // around CloseSession.
 type clientSlot struct {
 	client   uaSession
-	broken   uaSession
+	broken   []uaSession
 	refs     map[string]struct{}
 	inflight int
 	closing  bool
@@ -104,20 +104,25 @@ func (d *Driver) serverConfig() OPCUAServerConfig {
 	return cfg
 }
 
-func protocolString(protocols map[string]models.ProtocolProperties, key string) (string, bool) {
+// protocolString reads an optional string protocol property.
+// A missing, nil, or empty value is unset. A present non-string value is rejected.
+func protocolString(protocols map[string]models.ProtocolProperties, key string) (string, bool, error) {
 	properties, ok := protocols[Protocol]
 	if !ok {
-		return "", false
+		return "", false, nil
 	}
 	raw, ok := properties[key]
 	if !ok || raw == nil {
-		return "", false
+		return "", false, nil
 	}
 	value, ok := raw.(string)
-	if !ok || value == "" {
-		return "", false
+	if !ok {
+		return "", false, fmt.Errorf("cannot convert '%v' to string type for protocol property %s", raw, key)
 	}
-	return value, true
+	if value == "" {
+		return "", false, nil
+	}
+	return value, true, nil
 }
 
 func (d *Driver) sessionInfo(protocols map[string]models.ProtocolProperties) (sessionInfo, error) {
@@ -128,13 +133,20 @@ func (d *Driver) sessionInfo(protocols map[string]models.ProtocolProperties) (se
 	cfg := d.serverConfig()
 	policy := cfg.Policy
 	mode := cfg.Mode
-	if value, ok := protocolString(protocols, Policy); ok {
+	if value, ok, err := protocolString(protocols, Policy); err != nil {
+		return sessionInfo{}, err
+	} else if ok {
 		policy = value
 	}
-	if value, ok := protocolString(protocols, Mode); ok {
+	if value, ok, err := protocolString(protocols, Mode); err != nil {
+		return sessionInfo{}, err
+	} else if ok {
 		mode = value
 	}
-	secret, _ := protocolString(protocols, SecretName)
+	secret, _, propErr := protocolString(protocols, SecretName)
+	if propErr != nil {
+		return sessionInfo{}, propErr
+	}
 	if _, ok := policies[policy]; !ok {
 		return sessionInfo{}, fmt.Errorf("invalid OPC UA security policy %q", policy)
 	}
@@ -320,8 +332,8 @@ func (d *Driver) endUse(key string) {
 		return
 	}
 	var closing []uaSession
-	if slot.broken != nil {
-		closing = append(closing, slot.broken)
+	if len(slot.broken) > 0 {
+		closing = append(closing, slot.broken...)
 		slot.broken = nil
 	}
 	if slot.closing || len(slot.refs) == 0 {
@@ -338,10 +350,10 @@ func (d *Driver) dropSession(key string) {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	slot := d.clients[key]
-	if slot == nil || slot.closed || slot.client == nil || slot.broken != nil {
+	if slot == nil || slot.closed || slot.client == nil {
 		return
 	}
-	slot.broken = slot.client
+	slot.broken = append(slot.broken, slot.client)
 	slot.client = nil
 }
 
@@ -355,8 +367,8 @@ func detachLocked(slot *clientSlot) []uaSession {
 		out = append(out, slot.client)
 		slot.client = nil
 	}
-	if slot.broken != nil {
-		out = append(out, slot.broken)
+	if len(slot.broken) > 0 {
+		out = append(out, slot.broken...)
 		slot.broken = nil
 	}
 	return out

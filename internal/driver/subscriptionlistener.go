@@ -11,6 +11,7 @@ package driver
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -20,27 +21,30 @@ import (
 	"github.com/gopcua/opcua/ua"
 )
 
-func (d *Driver) startSubscriptionListener() error {
+// listenerStop is a subscription setup error that a new session will not fix.
+type listenerStop struct {
+	err error
+}
+
+func (e *listenerStop) Error() string { return e.err.Error() }
+
+func (e *listenerStop) Unwrap() error { return e.err }
+
+func isPermanentListenerError(err error) bool {
+	var target *listenerStop
+	return errors.As(err, &target)
+}
+
+func (d *Driver) startSubscriptionListener(ctx context.Context) error {
 
 	var (
 		deviceName = d.serviceConfig.OPCUAServer.DeviceName
 		resources  = d.serviceConfig.OPCUAServer.Writable.Resources
 	)
 
-	// No need to start a subscription if there are no resources to monitor
-	if len(resources) == 0 {
-		d.Logger.Info("[Incoming listener] No resources defined to generate subscriptions.")
-		return nil
-	}
-
-	// Create a cancelable context for Writable configuration
-	ctxBg := context.Background()
-	ctx, cancel := context.WithCancel(ctxBg)
-	d.ctxCancel = cancel
-
 	device, err := d.sdkService.GetDeviceByName(deviceName)
 	if err != nil {
-		return err
+		return &listenerStop{err: err}
 	}
 
 	// The listener shares the read/write session. endUse releases the in-flight
@@ -57,13 +61,17 @@ func (d *Driver) startSubscriptionListener() error {
 		Interval: time.Duration(500) * time.Millisecond,
 	}, notifyCh)
 	if err != nil {
-		return err
+		d.dropSession(key)
+		return transportFailure(err)
 	}
 	defer func(sub *opcua.Subscription, ctx context.Context) {
 		_ = sub.Cancel(ctx)
 	}(sub, ctx)
 
 	if err := d.configureMonitoredItems(sub, resources, deviceName); err != nil {
+		if isTransportError(err) {
+			d.dropSession(key)
+		}
 		return err
 	}
 
@@ -77,9 +85,14 @@ func (d *Driver) startSubscriptionListener() error {
 			return nil
 			// receive Publish Notification Data
 		case res := <-notifyCh:
-			if res.Error != nil {
-				d.Logger.Debug(res.Error.Error())
-				continue
+			if res == nil || res.Error != nil {
+				err := errors.New("OPC UA subscription closed")
+				if res != nil && res.Error != nil {
+					err = res.Error
+				}
+				d.Logger.Errorf("[Incoming listener] Subscription publish failed: %s", err)
+				d.dropSession(key)
+				return transportFailure(err)
 			}
 
 			switch x := res.Value.(type) {
@@ -110,17 +123,17 @@ func (d *Driver) configureMonitoredItems(sub *opcua.Subscription, resources, dev
 	for i, node := range strings.Split(resources, ",") {
 		deviceResource, ok := d.sdkService.DeviceResource(deviceName, node)
 		if !ok {
-			return fmt.Errorf("[Incoming listener] Unable to find device resource with name %s", node)
+			return &listenerStop{err: fmt.Errorf("[Incoming listener] Unable to find device resource with name %s", node)}
 		}
 
 		opcuaNodeID, err := getNodeID(deviceResource.Attributes, NODE)
 		if err != nil {
-			return err
+			return &listenerStop{err: err}
 		}
 
 		id, err := ua.ParseNodeID(opcuaNodeID)
 		if err != nil {
-			return err
+			return &listenerStop{err: err}
 		}
 
 		// arbitrary client handle for the monitoring item
@@ -130,8 +143,11 @@ func (d *Driver) configureMonitoredItems(sub *opcua.Subscription, resources, dev
 		miCreateRequest := opcua.NewMonitoredItemCreateRequestWithDefaults(id, ua.AttributeIDValue, handle)
 		ctx := context.Background()
 		res, err := sub.Monitor(ctx, ua.TimestampsToReturnBoth, miCreateRequest)
-		if err != nil || res.Results[0].StatusCode != ua.StatusOK {
-			return err
+		if err != nil {
+			return transportFailure(fmt.Errorf("[Incoming listener] monitor %s: %w", node, err))
+		}
+		if res == nil || len(res.Results) == 0 || res.Results[0].StatusCode != ua.StatusOK {
+			return &listenerStop{err: fmt.Errorf("[Incoming listener] monitor status for %s is not OK", node)}
 		}
 
 		d.Logger.Infof("[Incoming listener] Start incoming data listening for %s.", node)

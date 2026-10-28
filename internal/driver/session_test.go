@@ -338,3 +338,67 @@ func TestServicePolicyIsFallback(t *testing.T) {
 		t.Fatalf("device policy did not override the service config: %+v", overridden)
 	}
 }
+
+func TestNonStringProtocolPropertyIsRejected(t *testing.T) {
+	d := testDriver()
+	for _, key := range []string{Policy, Mode, SecretName} {
+		protocols := endpointProtocols("opc.tcp://plc:4840")
+		protocols[Protocol][key] = 123
+		if _, err := d.sessionInfo(protocols); err == nil {
+			t.Fatalf("%s accepted a non-string value", key)
+		}
+	}
+	protocols := endpointProtocols("opc.tcp://plc:4840")
+	protocols[Protocol][SecretName] = ""
+	info, err := d.sessionInfo(protocols)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if info.SecretName != "" || info.Policy != "None" || info.Mode != "None" {
+		t.Fatalf("empty property was not treated as unset: %+v", info)
+	}
+}
+
+func TestSecondDropReplacesBrokenSession(t *testing.T) {
+	d := testDriver()
+	var sessions []*fakeSession
+	d.dial = func(context.Context, sessionInfo) (uaSession, error) {
+		session := &fakeSession{}
+		sessions = append(sessions, session)
+		return session, nil
+	}
+	protocols := endpointProtocols("opc.tcp://plc:4840")
+	if err := d.AddDevice("listener", protocols, ""); err != nil {
+		t.Fatal(err)
+	}
+	ctx := context.Background()
+	first, key, err := d.acquire(ctx, "listener", protocols)
+	if err != nil {
+		t.Fatal(err)
+	}
+	d.dropSession(key)
+	second, key, err := d.acquire(ctx, "listener", protocols)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if second == first {
+		t.Fatal("dial did not replace the dropped session")
+	}
+	d.dropSession(key)
+	third, key, err := d.acquire(ctx, "listener", protocols)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if third == first || third == second {
+		t.Fatal("second transport failure reused a dead session")
+	}
+	d.endUse(key)
+	d.endUse(key)
+	d.endUse(key)
+	if sessions[0].closes.Load() != 1 || sessions[1].closes.Load() != 1 {
+		t.Fatalf("retired sessions closes = %d and %d, want 1 and 1", sessions[0].closes.Load(), sessions[1].closes.Load())
+	}
+	if sessions[2].closed() {
+		t.Fatal("live replacement was closed while the device still holds it")
+	}
+}
