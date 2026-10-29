@@ -402,3 +402,54 @@ func TestSecondDropReplacesBrokenSession(t *testing.T) {
 		t.Fatal("live replacement was closed while the device still holds it")
 	}
 }
+
+func TestCleanupCancelsTheInstalledListener(t *testing.T) {
+	d := testDriver()
+	ctx, ok := d.installListenerContext()
+	if !ok {
+		t.Fatal("listener context was not installed")
+	}
+	d.cleanup()
+	if ctx.Err() == nil {
+		t.Fatal("cleanup left the listener context active")
+	}
+	d.cleanup()
+}
+
+func TestStoppedServiceDiscardsNewListener(t *testing.T) {
+	d := testDriver()
+	d.mu.Lock()
+	d.stopped = true
+	d.mu.Unlock()
+	if _, ok := d.installListenerContext(); ok {
+		t.Fatal("stopped service installed a listener")
+	}
+	d.mu.Lock()
+	stored := d.ctxCancel != nil
+	d.mu.Unlock()
+	if stored {
+		t.Fatal("stopped service stored a cancel function")
+	}
+}
+
+func TestReplacingListenerCancelsThePreviousOne(t *testing.T) {
+	d := testDriver()
+	first, ok := d.installListenerContext()
+	if !ok {
+		t.Fatal("first listener was not installed")
+	}
+	second, ok := d.installListenerContext()
+	if !ok {
+		t.Fatal("replacement listener was not installed")
+	}
+	if first.Err() == nil {
+		t.Fatal("previous listener stayed active")
+	}
+	if second.Err() != nil {
+		t.Fatal("replacement listener was cancelled by the install")
+	}
+	d.cleanup()
+	if second.Err() == nil {
+		t.Fatal("cleanup did not cancel the replacement listener")
+	}
+}

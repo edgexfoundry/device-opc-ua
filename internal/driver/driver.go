@@ -109,11 +109,10 @@ func (d *Driver) startSubscriber() {
 		return
 	}
 
-	ctx, cancel := context.WithCancel(context.Background())
-	if d.ctxCancel != nil {
-		d.ctxCancel()
+	ctx, ok := d.installListenerContext()
+	if !ok {
+		return
 	}
-	d.ctxCancel = cancel
 
 	backoff := time.Second
 	for {
@@ -144,12 +143,35 @@ func (d *Driver) startSubscriber() {
 	}
 }
 
+// installListenerContext replaces the listener context.
+// A service that is already stopping does not keep the new context.
+// The previous cancel function runs after the lock is released.
+func (d *Driver) installListenerContext() (context.Context, bool) {
+	ctx, cancel := context.WithCancel(context.Background())
+	d.mu.Lock()
+	if d.stopped {
+		d.mu.Unlock()
+		cancel()
+		return nil, false
+	}
+	prev := d.ctxCancel
+	d.ctxCancel = cancel
+	d.mu.Unlock()
+	if prev != nil {
+		prev()
+	}
+	return ctx, true
+}
+
 // Close the existing context.
-// This, in turn, cancels the existing subscription if it exists
+// This, in turn, cancels the existing subscription if it exists.
 func (d *Driver) cleanup() {
-	if d.ctxCancel != nil {
-		d.ctxCancel()
-		d.ctxCancel = nil
+	d.mu.Lock()
+	cancel := d.ctxCancel
+	d.ctxCancel = nil
+	d.mu.Unlock()
+	if cancel != nil {
+		cancel()
 	}
 }
 

@@ -61,6 +61,9 @@ func (d *Driver) startSubscriptionListener(ctx context.Context) error {
 		Interval: time.Duration(500) * time.Millisecond,
 	}, notifyCh)
 	if err != nil {
+		if ctx.Err() != nil {
+			return nil
+		}
 		d.dropSession(key)
 		return transportFailure(err)
 	}
@@ -69,6 +72,9 @@ func (d *Driver) startSubscriptionListener(ctx context.Context) error {
 	}(sub, ctx)
 
 	if err := d.configureMonitoredItems(sub, resources, deviceName); err != nil {
+		if ctx.Err() != nil {
+			return nil
+		}
 		if isTransportError(err) {
 			d.dropSession(key)
 		}
@@ -86,6 +92,9 @@ func (d *Driver) startSubscriptionListener(ctx context.Context) error {
 			// receive Publish Notification Data
 		case res := <-notifyCh:
 			if res == nil || res.Error != nil {
+				if ctx.Err() != nil {
+					return nil
+				}
 				err := errors.New("OPC UA subscription closed")
 				if res != nil && res.Error != nil {
 					err = res.Error

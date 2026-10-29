@@ -24,6 +24,9 @@
   transport failure retires that session, including one dialed while an older
   session is still in use. The subscription listener drops the failed session
   and dials again. A bad monitored-item status does not.
+- Stopping the listener, including while `Subscribe` is still in progress,
+  leaves a shared session in place. Listener start and cleanup update the
+  cancel function under the driver lock.
 
 ## [4.0.2] - 2026-05-31 
 
