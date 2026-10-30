@@ -10,6 +10,24 @@
 - [go-mod-secrets](https://github.com/edgexfoundry/go-mod-secrets/blob/main/CHANGELOG.md) (indirect dependency)
 - [go-mod-configuration](https://github.com/edgexfoundry/go-mod-configuration/blob/main/CHANGELOG.md) (indirect dependency)
 
+## [Unreleased]
+
+### ✨ Features
+
+- Username and password authentication for an OPC UA server ([#46](https://github.com/edgexfoundry/device-opc-ua/issues/46)).
+  Optional protocol properties `Policy`, `Mode`, and `SecretName`. `SecretName`
+  loads `username` and `password` from the service secret store. A device
+  that omits it stays anonymous. One session is shared per endpoint, policy,
+  mode, and secret name, and it closes when the last device releases it or
+  when the service stops.
+- A present non-string `Policy`, `Mode`, or `SecretName` is rejected. Each
+  transport failure retires that session, including one dialed while an older
+  session is still in use. The subscription listener drops the failed session
+  and dials again. A bad monitored-item status does not.
+- Stopping the listener, including while `Subscribe` is still in progress,
+  leaves a shared session in place. Listener start and cleanup update the
+  cancel function under the driver lock.
+
 ## [4.0.2] - 2026-05-31 
 
 ### 👷 Build 

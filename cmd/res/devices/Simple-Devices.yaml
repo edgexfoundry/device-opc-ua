@@ -8,3 +8,10 @@ deviceList:
     protocols:
       opcua:
         Endpoint: "opc.tcp://192.168.123.21:53530/OPCUA/SimulationServer"
+        # Policy and Mode override OPCUAServer when set. Omit them to keep
+        # the service defaults (None / None).
+        # Policy: Basic256Sha256
+        # Mode: SignAndEncrypt
+        # SecretName is a secret-store path. The secret keys are username
+        # and password. Omit SecretName for anonymous access.
+        # SecretName: opcua/simulation

@@ -30,19 +30,18 @@ func (d *Driver) HandleWriteCommands(deviceName string, protocols map[string]mod
 	d.Logger.Debugf("Driver.HandleWriteCommands: protocols: %v, resource: %v, parameters: %v", protocols, reqs[0].DeviceResourceName, params)
 	var err error
 
-	// create device client and open connection
-	endpoint, err := FetchEndpoint(protocols)
-	if err != nil {
-		return err
-	}
-
-	client, cliErr := d.buildClient(context.Background(), endpoint)
+	client, key, cliErr := d.acquireClient(context.Background(), deviceName, protocols)
 	if cliErr != nil {
-		d.Logger.Warnf("Driver.HandleReadCommands: Failed to connect OPCUA client, %s", err)
+		d.Logger.Warnf("Driver.HandleWriteCommands: Failed to connect OPCUA client, %s", cliErr)
 		return cliErr
 	}
+	defer d.endUse(key)
 
-	return d.processWriteCommands(client, reqs, params)
+	err = d.processWriteCommands(client, reqs, params)
+	if isTransportError(err) {
+		d.dropSession(key)
+	}
+	return err
 }
 
 func (d *Driver) processWriteCommands(client *opcua.Client, reqs []sdkModel.CommandRequest, params []*sdkModel.CommandValue) error {
@@ -97,7 +96,7 @@ func (d *Driver) handleWriteCommandRequest(deviceClient *opcua.Client, req sdkMo
 	resp, err := deviceClient.Write(ctx, request)
 	if err != nil {
 		d.Logger.Errorf("Driver.handleWriteCommands: Write value %v failed: %s", v, err)
-		return err
+		return transportFailure(err)
 	}
 	d.Logger.Infof("Driver.handleWriteCommands: write sucessfully, %v", resp.Results[0])
 	return nil

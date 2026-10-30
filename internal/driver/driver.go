@@ -20,8 +20,6 @@ import (
 	"github.com/edgexfoundry/go-mod-core-contracts/v4/clients/logger"
 	"github.com/edgexfoundry/go-mod-core-contracts/v4/errors"
 	"github.com/edgexfoundry/go-mod-core-contracts/v4/models"
-	"github.com/gopcua/opcua"
-	"github.com/gopcua/opcua/ua"
 )
 
 var once sync.Once
@@ -36,7 +34,12 @@ type Driver struct {
 	resourceMap   map[uint32]string
 	mu            sync.Mutex
 	ctxCancel     context.CancelFunc
-	clientMap     map[string]*opcua.Client
+	clients       map[string]*clientSlot
+	deviceKeys    map[string]string
+	stopped       bool
+	// dial and secrets are test seams. Production leaves them nil.
+	dial    func(ctx context.Context, info sessionInfo) (uaSession, error)
+	secrets secretGetter
 }
 
 // NewProtocolDriver returns a new protocol driver object
@@ -55,7 +58,9 @@ func (d *Driver) Initialize(sdk interfaces.DeviceServiceSDK) error {
 	d.serviceConfig = &ServiceConfig{}
 	d.mu.Lock()
 	d.resourceMap = make(map[uint32]string)
-	d.clientMap = make(map[string]*opcua.Client)
+	d.clients = make(map[string]*clientSlot)
+	d.deviceKeys = make(map[string]string)
+	d.stopped = false
 	d.mu.Unlock()
 
 	if err := sdk.LoadCustomConfig(d.serviceConfig, CustomConfigSectionName); err != nil {
@@ -91,26 +96,91 @@ func (d *Driver) updateWritableConfig(rawWritableConfig interface{}) {
 	go d.startSubscriber()
 }
 
-// Start or restart the subscription listener
+// Start or restart the subscription listener.
+// A transport failure drops the shared session and dials again. A configuration
+// error stops the listener. cleanup cancels the context and ends the retry.
 func (d *Driver) startSubscriber() {
-	err := d.startSubscriptionListener()
-	if err != nil {
+	resources := ""
+	if d.serviceConfig != nil {
+		resources = d.serviceConfig.OPCUAServer.Writable.Resources
+	}
+	if len(resources) == 0 {
+		d.Logger.Info("[Incoming listener] No resources defined to generate subscriptions.")
+		return
+	}
+
+	ctx, ok := d.installListenerContext()
+	if !ok {
+		return
+	}
+
+	backoff := time.Second
+	for {
+		err := d.startSubscriptionListener(ctx)
+		if err == nil || ctx.Err() != nil {
+			return
+		}
 		d.Logger.Errorf("Driver.Initialize: Start incoming data Listener failed: %v", err)
+		if isPermanentListenerError(err) {
+			return
+		}
+		d.mu.Lock()
+		stopped := d.stopped
+		d.mu.Unlock()
+		if stopped {
+			return
+		}
+		timer := time.NewTimer(backoff)
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+			return
+		case <-timer.C:
+		}
+		if backoff < 30*time.Second {
+			backoff *= 2
+		}
 	}
 }
 
+// installListenerContext replaces the listener context.
+// A service that is already stopping does not keep the new context.
+// The previous cancel function runs after the lock is released.
+func (d *Driver) installListenerContext() (context.Context, bool) {
+	ctx, cancel := context.WithCancel(context.Background())
+	d.mu.Lock()
+	if d.stopped {
+		d.mu.Unlock()
+		cancel()
+		return nil, false
+	}
+	prev := d.ctxCancel
+	d.ctxCancel = cancel
+	d.mu.Unlock()
+	if prev != nil {
+		prev()
+	}
+	return ctx, true
+}
+
 // Close the existing context.
-// This, in turn, cancels the existing subscription if it exists
+// This, in turn, cancels the existing subscription if it exists.
 func (d *Driver) cleanup() {
-	if d.ctxCancel != nil {
-		d.ctxCancel()
-		d.ctxCancel = nil
+	d.mu.Lock()
+	cancel := d.ctxCancel
+	d.ctxCancel = nil
+	d.mu.Unlock()
+	if cancel != nil {
+		cancel()
 	}
 }
 
 // AddDevice is a callback function that is invoked
 // when a new Device associated with this Device Service is added
 func (d *Driver) AddDevice(deviceName string, protocols map[string]models.ProtocolProperties, adminState models.AdminState) error {
+	if err := d.trackDevice(deviceName, protocols); err != nil {
+		return err
+	}
 	// Start subscription listener when device is added.
 	// This does not happen automatically like it does when the device is updated
 	go d.startSubscriber()
@@ -121,6 +191,26 @@ func (d *Driver) AddDevice(deviceName string, protocols map[string]models.Protoc
 // UpdateDevice is a callback function that is invoked
 // when a Device associated with this Device Service is updated
 func (d *Driver) UpdateDevice(deviceName string, protocols map[string]models.ProtocolProperties, adminState models.AdminState) error {
+	info, err := d.sessionInfo(protocols)
+	if err != nil {
+		return err
+	}
+	d.mu.Lock()
+	d.ensureMapsLocked()
+	prev, had := d.deviceKeys[deviceName]
+	d.mu.Unlock()
+	restart := had && prev != info.Key() && d.subscriptionDevice(deviceName)
+	if restart {
+		// Let the listener drop its in-flight use before the old session can close.
+		d.cleanup()
+		d.waitKeyIdle(prev)
+	}
+	if err := d.trackDevice(deviceName, protocols); err != nil {
+		return err
+	}
+	if restart {
+		go d.startSubscriber()
+	}
 	d.Logger.Debugf("Device %s is updated", deviceName)
 	return nil
 }
@@ -128,6 +218,18 @@ func (d *Driver) UpdateDevice(deviceName string, protocols map[string]models.Pro
 // RemoveDevice is a callback function that is invoked
 // when a Device associated with this Device Service is removed
 func (d *Driver) RemoveDevice(deviceName string, protocols map[string]models.ProtocolProperties) error {
+	if d.subscriptionDevice(deviceName) {
+		d.mu.Lock()
+		d.ensureMapsLocked()
+		key := d.deviceKeys[deviceName]
+		d.mu.Unlock()
+		// Cancel the subscription only. Client.Close belongs to the refcount.
+		d.cleanup()
+		if key != "" {
+			d.waitKeyIdle(key)
+		}
+	}
+	d.releaseDevice(deviceName)
 	d.Logger.Debugf("Device %s is removed", deviceName)
 	return nil
 }
@@ -142,14 +244,22 @@ func (d *Driver) Start() error {
 // readings (if supported).
 func (d *Driver) Stop(force bool) error {
 	d.mu.Lock()
+	d.stopped = true
 	d.resourceMap = nil
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-	for _, cli := range d.clientMap {
-		cli.Close(ctx)
-	}
 	d.mu.Unlock()
+	// The listener ends its subscription and its in-flight count. It does not Close.
 	d.cleanup()
+	d.waitIdle()
+	d.mu.Lock()
+	d.ensureMapsLocked()
+	var closing []uaSession
+	for key, slot := range d.clients {
+		closing = append(closing, detachLocked(slot)...)
+		delete(d.clients, key)
+	}
+	d.deviceKeys = make(map[string]string)
+	d.mu.Unlock()
+	closeSessions(closing)
 	return nil
 }
 
@@ -158,7 +268,7 @@ func (d *Driver) Discover() error {
 }
 
 func (d *Driver) ValidateDevice(device models.Device) error {
-	_, err := FetchEndpoint(device.Protocols)
+	_, err := d.sessionInfo(device.Protocols)
 	if err != nil {
 		return fmt.Errorf("invalid protocol properties, %v", err)
 	}
@@ -172,19 +282,4 @@ func getNodeID(attrs map[string]interface{}, id string) (string, error) {
 	}
 
 	return identifier.(string), nil
-}
-
-func (d *Driver) buildClient(ctx context.Context, endpoint string) (*opcua.Client, error) {
-	d.mu.Lock()
-	defer d.mu.Unlock()
-	if client, ok := d.clientMap[endpoint]; ok {
-		return client, nil
-	}
-
-	client, _ := opcua.NewClient(endpoint, opcua.SecurityMode(ua.MessageSecurityModeNone))
-	if err := client.Connect(ctx); err != nil {
-		return nil, err
-	}
-	d.clientMap[endpoint] = client
-	return client, nil
 }

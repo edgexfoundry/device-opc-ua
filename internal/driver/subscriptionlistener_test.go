@@ -8,10 +8,12 @@
 package driver
 
 import (
+	"context"
+	"fmt"
 	"testing"
 
+	"github.com/edgexfoundry/go-mod-core-contracts/v4/clients/logger"
 	"github.com/edgexfoundry/go-mod-core-contracts/v4/models"
-	"github.com/gopcua/opcua"
 )
 
 //comment out following unittest as it requires to run a Python-based simulated OPC UA server, which is not available
@@ -31,41 +33,47 @@ import (
 //	})
 //}
 
-func TestDriver_getClient(t *testing.T) {
+func TestDriver_acquireClient(t *testing.T) {
 	tests := []struct {
-		name          string
-		serviceConfig *ServiceConfig
-		device        models.Device
-		want          *opcua.Client
-		wantErr       bool
+		name    string
+		device  models.Device
+		dialErr error
+		wantErr bool
 	}{
 		{
-			name:          "NOK - no endpoint configured",
-			serviceConfig: &ServiceConfig{OPCUAServer: OPCUAServerConfig{}},
+			name: "NOK - no endpoint configured",
 			device: models.Device{
+				Name:      "missing",
 				Protocols: make(map[string]models.ProtocolProperties),
 			},
 			wantErr: true,
 		},
 		{
-			name:          "NOK - no server connection",
-			serviceConfig: &ServiceConfig{OPCUAServer: OPCUAServerConfig{}},
+			name: "NOK - dial failed",
 			device: models.Device{
+				Name: "plc",
 				Protocols: map[string]models.ProtocolProperties{
-					"opcua": {"Endpoint": "opc.tcp://test"},
+					"opcua": {"Endpoint": "opc.tcp://plc:4840"},
 				},
 			},
+			dialErr: fmt.Errorf("no server"),
 			wantErr: true,
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			d := NewProtocolDriver().(*Driver)
-			d.serviceConfig = &ServiceConfig{}
-			_, err := d.getClient(tt.device)
+			d := &Driver{
+				Logger:        &logger.MockLogger{},
+				serviceConfig: &ServiceConfig{OPCUAServer: OPCUAServerConfig{Policy: "None", Mode: "None"}},
+			}
+			if tt.dialErr != nil {
+				d.dial = func(context.Context, sessionInfo) (uaSession, error) {
+					return nil, tt.dialErr
+				}
+			}
+			_, _, err := d.acquire(context.Background(), tt.device.Name, tt.device.Protocols)
 			if (err != nil) != tt.wantErr {
-				t.Errorf("Driver.getClient() error = %v, wantErr %v", err, tt.wantErr)
-				return
+				t.Errorf("Driver.acquire() error = %v, wantErr %v", err, tt.wantErr)
 			}
 		})
 	}
