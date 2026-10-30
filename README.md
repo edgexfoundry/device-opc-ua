@@ -22,6 +22,7 @@ This repository is a Go-based EdgeX Foundry Device Service which uses OPC-UA pro
 3. Execute write command
 4. Execute method (using Read command of device SDK)
 5. Username/password authentication per device, or anonymous when no secret is set
+6. Browse the direct children of one node (`GET /api/v3/opcua/device/{deviceName}/browse`)
 
 ## Username and password
 
@@ -59,6 +60,26 @@ POST /api/v3/secret
     {"key": "password", "value": "secret"}
   ]
 }
+```
+
+## Browse one level
+
+```text
+GET /api/v3/opcua/device/{deviceName}/browse?nodeId=&maxNodes=200
+```
+
+`deviceName` is the EdgeX device name. `nodeId` is a node on that server. Without `nodeId` the call returns the children of the `Objects` folder (`i=85`). The response does not descend. The caller sends a child's `nodeId` to open the next level. A `depth` parameter is rejected.
+
+`maxNodes` defaults to 200 and cannot exceed 1000. `includeProperties` defaults to false and drops `HasProperty` references. `nodeClass` is an optional comma-separated list of `Object`, `Variable`, `Method`, and `View`. When a sibling list does not fit, the response sets `truncated` and `continuationToken`. The token is standard base64 of the OPC UA continuation point for the current session. URL-encode it and repeat the same `nodeId`. An unknown token returns `409`. The call times out after 15 seconds.
+
+Variable nodes include `dataType`, `dataTypeId`, `valueRank`, and `accessLevel`. `edgexValueType` is set only for a scalar built-in type with a direct EdgeX match (`Float` to `Float32`, `Double` to `Float64`, integers, `Boolean` to `Bool`, `String` to `String`, `ByteString` to `Binary`). Structures, enumerations, and arrays (`valueRank` >= 0) omit it.
+
+The route is registered as `Unauthenticated`. Device command GET and PUT on the same port still require the EdgeX JWT. Browse uses the same session as read and write, including `SecretName`. A transport error drops that session. A `continuationToken` from the dropped session returns `409`, and the same `nodeId` is requested again without the token.
+
+```bash
+curl -fsS "http://localhost:59997/api/v3/opcua/device/SimulationServer/browse"
+curl -fsS --get "http://localhost:59997/api/v3/opcua/device/SimulationServer/browse" \
+  --data-urlencode "nodeId=ns=3;i=1001"
 ```
 
 ## Prerequisites
