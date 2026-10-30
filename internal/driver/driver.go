@@ -12,6 +12,7 @@ package driver
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"sync"
 	"time"
 
@@ -20,6 +21,7 @@ import (
 	"github.com/edgexfoundry/go-mod-core-contracts/v4/clients/logger"
 	"github.com/edgexfoundry/go-mod-core-contracts/v4/errors"
 	"github.com/edgexfoundry/go-mod-core-contracts/v4/models"
+	"github.com/gopcua/opcua"
 )
 
 var once sync.Once
@@ -33,6 +35,7 @@ type Driver struct {
 	serviceConfig *ServiceConfig
 	resourceMap   map[uint32]string
 	mu            sync.Mutex
+	browseMu      sync.Mutex
 	ctxCancel     context.CancelFunc
 	clients       map[string]*clientSlot
 	deviceKeys    map[string]string
@@ -77,7 +80,34 @@ func (d *Driver) Initialize(sdk interfaces.DeviceServiceSDK) error {
 		return errors.NewCommonEdgeX(errors.Kind(err), fmt.Sprintf("unable to listen for changes for '%s' custom configuration", WritableInfoSectionName), err)
 	}
 
+	if err := sdk.AddCustomRoute(
+		"/api/v3/opcua/device/:deviceName/browse",
+		interfaces.Unauthenticated,
+		d.handleBrowse,
+		http.MethodGet,
+	); err != nil {
+		return errors.NewCommonEdgeX(errors.KindServerError, "unable to add OPC UA browse route", err)
+	}
+
 	return nil
+}
+
+// opcuaClient returns the shared OPC UA session for deviceName and a release
+// function. release(err) drops the session when err is a transport error, then
+// ends this use. Read and write use the same acquireClient, dropSession, and
+// endUse sequence.
+func (d *Driver) opcuaClient(ctx context.Context, deviceName string, protocols map[string]models.ProtocolProperties) (*opcua.Client, func(error), error) {
+	client, key, err := d.acquireClient(ctx, deviceName, protocols)
+	if err != nil {
+		return nil, nil, err
+	}
+	release := func(callErr error) {
+		if isTransportError(callErr) {
+			d.dropSession(key)
+		}
+		d.endUse(key)
+	}
+	return client, release, nil
 }
 
 // Callback function provided to ListenForCustomConfigChanges to update

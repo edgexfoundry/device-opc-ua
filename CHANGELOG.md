@@ -14,6 +14,10 @@
 
 ### ✨ Features
 
+- `GET /api/v3/opcua/device/{deviceName}/browse` returns the direct children of one node.
+  The caller requests the next level itself. The route does not require a JWT.
+  Read and write on the same port still do. A transport error drops the shared
+  session, and a continuation token from that session returns `409`.
 - Username and password authentication for an OPC UA server ([#46](https://github.com/edgexfoundry/device-opc-ua/issues/46)).
   Optional protocol properties `Policy`, `Mode`, and `SecretName`. `SecretName`
   loads `username` and `password` from the service secret store. A device
